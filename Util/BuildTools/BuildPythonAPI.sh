@@ -28,10 +28,11 @@ while true; do
   case "$1" in
     --rebuild )
       REMOVE_INTERMEDIATE=true;
-      BUILD_FOR_PYTHON2=true;
+      BUILD_FOR_PYTHON2=false;
       BUILD_FOR_PYTHON3=true;
       shift ;;
     --py2 )
+      echo "Warning: building PythonAPI for Python 2 is not supported"
       BUILD_FOR_PYTHON2=true;
       shift ;;
     --py3 )
