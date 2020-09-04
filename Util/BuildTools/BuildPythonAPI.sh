@@ -94,7 +94,7 @@ if ${BUILD_FOR_PYTHON3} ; then
 
   log "Building Python API for Python 3."
 
-  /usr/bin/env python3 setup.py bdist_egg
+  /usr/bin/env python3 setup.py bdist_egg bdist_wheel
 
 fi
 
