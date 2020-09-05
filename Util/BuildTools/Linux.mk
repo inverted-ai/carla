@@ -58,7 +58,7 @@ check.LibCarla.release: LibCarla.release
 	@${CARLA_BUILD_TOOLS_FOLDER}/Check.sh --libcarla-release $(ARGS)
 
 check.PythonAPI: PythonAPI
-	@${CARLA_BUILD_TOOLS_FOLDER}/Check.sh --python-api-2 --python-api-3 $(ARGS)
+	@${CARLA_BUILD_TOOLS_FOLDER}/Check.sh --python-api-3 $(ARGS)
 
 check.PythonAPI.2: PythonAPI.2
 	@${CARLA_BUILD_TOOLS_FOLDER}/Check.sh --python-api-2 $(ARGS)
@@ -84,7 +84,7 @@ CarlaUE4Editor: LibCarla.server.release
 
 .PHONY: PythonAPI
 PythonAPI: LibCarla.client.release osm2odr
-	@${CARLA_BUILD_TOOLS_FOLDER}/BuildPythonAPI.sh --py2 --py3
+	@${CARLA_BUILD_TOOLS_FOLDER}/BuildPythonAPI.sh --py3
 
 PythonAPI.2: LibCarla.client.release osm2odr
 	@${CARLA_BUILD_TOOLS_FOLDER}/BuildPythonAPI.sh --py2
@@ -96,7 +96,7 @@ PythonAPI.rebuild: LibCarla.client.release osm2odr
 	@${CARLA_BUILD_TOOLS_FOLDER}/BuildPythonAPI.sh --rebuild
 
 PythonAPI.rss: LibCarla.client.rss.release osm2odr
-	@${CARLA_BUILD_TOOLS_FOLDER}/BuildPythonAPI.sh --py2 --py3 --rss
+	@${CARLA_BUILD_TOOLS_FOLDER}/BuildPythonAPI.sh --py3 --rss
 
 PythonAPI.rss.2: LibCarla.client.rss.release osm2odr
 	@${CARLA_BUILD_TOOLS_FOLDER}/BuildPythonAPI.sh --py2 --rss
