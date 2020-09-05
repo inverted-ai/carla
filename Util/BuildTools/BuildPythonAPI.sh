@@ -30,10 +30,11 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --rebuild )
       REMOVE_INTERMEDIATE=true;
-      BUILD_FOR_PYTHON2=true;
+      BUILD_FOR_PYTHON2=false;
       BUILD_FOR_PYTHON3=true;
       shift ;;
     --py2 )
+      echo "Warning: building PythonAPI for Python 2 is not supported"
       BUILD_FOR_PYTHON2=true;
       shift ;;
     --py3 )
@@ -99,7 +100,7 @@ if ${BUILD_FOR_PYTHON3} ; then
 
   log "Building Python API for Python 3."
 
-  /usr/bin/env python${PY3_VERSION} setup.py bdist_egg
+  /usr/bin/env python${PY3_VERSION} setup.py bdist_egg bdist_wheel
 
 fi
 
