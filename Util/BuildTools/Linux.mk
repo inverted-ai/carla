@@ -85,7 +85,6 @@ CarlaUE4Editor: LibCarla.server.release
 .PHONY: PythonAPI
 PythonAPI: LibCarla.client.release osm2odr
 	@${CARLA_BUILD_TOOLS_FOLDER}/BuildPythonAPI.sh $(ARGS)
-
 PythonAPI.2: LibCarla.client.release osm2odr
 	@${CARLA_BUILD_TOOLS_FOLDER}/BuildPythonAPI.sh --python-version=2
 
