@@ -12,6 +12,7 @@
 #include "carla/rpc/ActorDescription.h"
 #include "carla/rpc/ActorId.h"
 #include "carla/rpc/VehicleControl.h"
+#include "carla/rpc/VehicleLightState.h"
 #include "carla/rpc/WalkerControl.h"
 
 #include <boost/variant.hpp>
@@ -131,6 +132,16 @@ namespace rpc {
       MSGPACK_DEFINE_ARRAY(actor, impulse);
     };
 
+    struct ApplyAngularImpulse : CommandBase<ApplyAngularImpulse> {
+      ApplyAngularImpulse() = default;
+      ApplyAngularImpulse(ActorId id, const geom::Vector3D &value)
+        : actor(id),
+          impulse(value) {}
+      ActorId actor;
+      geom::Vector3D impulse;
+      MSGPACK_DEFINE_ARRAY(actor, impulse);
+    };
+
     struct SetSimulatePhysics : CommandBase<SetSimulatePhysics> {
       SetSimulatePhysics() = default;
       SetSimulatePhysics(ActorId id, bool value)
@@ -142,8 +153,6 @@ namespace rpc {
     };
 
     struct SetAutopilot : CommandBase<SetAutopilot> {
-      using TM = traffic_manager::TrafficManager;
-
       SetAutopilot() = default;
       SetAutopilot(
           ActorId id,
@@ -158,6 +167,18 @@ namespace rpc {
       MSGPACK_DEFINE_ARRAY(actor, enabled);
     };
 
+    struct SetVehicleLightState : CommandBase<SetVehicleLightState> {
+      SetVehicleLightState() = default;
+      SetVehicleLightState(
+          ActorId id,
+          VehicleLightState::flag_type value)
+        : actor(id),
+          light_state(value) {}
+      ActorId actor;
+      VehicleLightState::flag_type light_state;
+      MSGPACK_DEFINE_ARRAY(actor, light_state);
+    };
+
     using CommandType = boost::variant<
         SpawnActor,
         DestroyActor,
@@ -168,8 +189,10 @@ namespace rpc {
         ApplyVelocity,
         ApplyAngularVelocity,
         ApplyImpulse,
+        ApplyAngularImpulse,
         SetSimulatePhysics,
-        SetAutopilot>;
+        SetAutopilot,
+        SetVehicleLightState>;
 
     CommandType command;
 

@@ -6,7 +6,7 @@ rem Run it through a cmd with the x64 Visual C++ Toolset enabled.
 rem https://wiki.unrealengine.com/How_to_package_your_game_with_commands
 
 set LOCAL_PATH=%~dp0
-set "FILE_N=-[%~n0]:"
+set FILE_N=-[%~n0]:
 
 rem Print batch params (debug purpose)
 echo %FILE_N% [Batch params]: %*
@@ -22,8 +22,6 @@ set DO_PACKAGE=true
 set DO_COPY_FILES=true
 set DO_TARBALL=true
 set DO_CLEAN=false
-
-set UE_VERSION=4.24
 set PACKAGES=Carla
 
 
@@ -45,14 +43,11 @@ if not "%1"=="" (
         set DO_PACKAGE=false
     )
 
-    if "%1"=="--ue-version" (
-        set UE_VERSION=%~2
-    )
-
     if "%1"=="--packages" (
         set DO_PACKAGE=false
         set DO_COPY_FILES=false
         set PACKAGES=%~2
+        shift
     )
 
     if "%1"=="-h" (
@@ -71,13 +66,17 @@ if not "%1"=="" (
     goto :arg-parse
 )
 
-rem Extract Unreal Engine root path
-rem
-set KEY_NAME="HKEY_LOCAL_MACHINE\SOFTWARE\EpicGames\Unreal Engine\%UE_VERSION%"
-set VALUE_NAME=InstalledDirectory
-
-for /f "usebackq tokens=2*" %%A in (`reg query %KEY_NAME% /v %VALUE_NAME% /reg:64`) do set UE4_ROOT=%%B
-if not defined UE4_ROOT goto error_unreal_no_found
+rem Get Unreal Engine root path
+if not defined UE4_ROOT (
+    set KEY_NAME="HKEY_LOCAL_MACHINE\SOFTWARE\EpicGames\Unreal Engine"
+    set VALUE_NAME=InstalledDirectory
+    for /f "usebackq tokens=1,2,*" %%A in (`reg query !KEY_NAME! /s /reg:64`) do (
+        if "%%A" == "!VALUE_NAME!" (
+            set UE4_ROOT=%%C
+        )
+    )
+    if not defined UE4_ROOT goto error_unreal_no_found
+)
 
 rem Set packaging paths
 rem
@@ -150,6 +149,7 @@ if %DO_COPY_FILES%==true (
     echo f | xcopy /y "!XCOPY_FROM!Docs\release_readme.md"                          "!XCOPY_TO!README"
     echo f | xcopy /y "!XCOPY_FROM!Util\Docker\Release.Dockerfile"                  "!XCOPY_TO!Dockerfile"
     echo f | xcopy /y "!XCOPY_FROM!PythonAPI\carla\dist\*.egg"                      "!XCOPY_TO!PythonAPI\carla\dist\"
+    echo f | xcopy /y /s "!XCOPY_FROM!PythonAPI\carla\data\*"                          "!XCOPY_TO!PythonAPI\carla\data\"
     echo d | xcopy /y /s "!XCOPY_FROM!Co-Simulation"                                "!XCOPY_TO!Co-Simulation"
     echo d | xcopy /y /s "!XCOPY_FROM!PythonAPI\carla\agents"                       "!XCOPY_TO!PythonAPI\carla\agents"
     echo f | xcopy /y "!XCOPY_FROM!PythonAPI\carla\scene_layout.py"                 "!XCOPY_TO!PythonAPI\carla\"
@@ -354,7 +354,7 @@ rem ============================================================================
 
 :error_unreal_no_found
     echo.
-    echo %FILE_N% [ERROR] Unreal Engine %UE_VERSION% not detected
+    echo %FILE_N% [ERROR] Unreal Engine not detected
     goto bad_exit
 
 :error_build_editor

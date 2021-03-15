@@ -22,6 +22,7 @@
 #include "carla/client/detail/WalkerNavigation.h"
 #include "carla/profiler/LifetimeProfiled.h"
 #include "carla/rpc/TrafficLightState.h"
+#include "carla/rpc/VehicleLightStateList.h"
 
 #include <boost/optional.hpp>
 
@@ -197,6 +198,10 @@ namespace detail {
 
     SharedPtr<BlueprintLibrary> GetBlueprintLibrary();
 
+    /// Returns a list of pairs where the firts element is the vehicle ID
+    /// and the second one is the light state
+    rpc::VehicleLightStateList GetVehiclesLightStates();
+
     SharedPtr<Actor> GetSpectator();
 
     rpc::EpisodeSettings GetEpisodeSettings() {
@@ -325,6 +330,10 @@ namespace detail {
       _client.AddActorImpulse(actor.GetId(), vector);
     }
 
+    void AddActorAngularImpulse(const Actor &actor, const geom::Vector3D &vector) {
+      _client.AddActorAngularImpulse(actor.GetId(), vector);
+    }
+
     geom::Vector3D GetActorAcceleration(const Actor &actor) const {
       return GetActorSnapshot(actor).acceleration;
     }
@@ -381,8 +390,8 @@ namespace detail {
     // =========================================================================
     /// @{
 
-    std::string StartRecorder(std::string name) {
-      return _client.StartRecorder(std::move(name));
+    std::string StartRecorder(std::string name, bool additional_data) {
+      return _client.StartRecorder(std::move(name), additional_data);
     }
 
     void StopRecorder(void) {
@@ -412,6 +421,10 @@ namespace detail {
     void SetReplayerIgnoreHero(bool ignore_hero) {
       _client.SetReplayerIgnoreHero(ignore_hero);
     }
+
+    void StopReplayer(bool keep_actors) {
+      _client.StopReplayer(keep_actors);
+  }
 
     /// @}
     // =========================================================================
@@ -449,6 +462,10 @@ namespace detail {
 
     void FreezeTrafficLight(TrafficLight &trafficLight, bool freeze) {
       _client.FreezeTrafficLight(trafficLight.GetId(), freeze);
+    }
+
+    void ResetTrafficLightGroup(TrafficLight &trafficLight) {
+      _client.ResetTrafficLightGroup(trafficLight.GetId());
     }
 
     std::vector<ActorId> GetGroupTrafficLights(TrafficLight &trafficLight) {
@@ -508,6 +525,8 @@ namespace detail {
       DEBUG_ASSERT(_episode != nullptr);
       _episode->RemoveLightUpdateChangeEvent(id);
     }
+
+    void FreezeAllTrafficLights(bool frozen);
 
     /// @}
 

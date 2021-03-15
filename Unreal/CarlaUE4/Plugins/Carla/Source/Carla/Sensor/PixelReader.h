@@ -64,6 +64,11 @@ public:
   template <typename TSensor>
   static void SendPixelsInRenderThread(TSensor &Sensor);
 
+  static void WritePixelsToArray(
+      UTextureRenderTarget2D &RenderTarget,
+      TArray<FColor>& Pixels,
+      FRHICommandListImmediate &InRHICmdList);
+
 private:
 
   /// Copy the pixels in @a RenderTarget into @a Buffer.
@@ -86,6 +91,11 @@ void FPixelReader::SendPixelsInRenderThread(TSensor &Sensor)
 {
   check(Sensor.CaptureRenderTarget != nullptr);
 
+  if (!Sensor.HasActorBegunPlay() || Sensor.IsPendingKill())
+  {
+    return;
+  }
+
   // Enqueue a command in the render-thread that will write the image buffer to
   // the data stream. The stream is created in the capture thus executed in the
   // game-thread.
@@ -102,7 +112,12 @@ void FPixelReader::SendPixelsInRenderThread(TSensor &Sensor)
             Buffer,
             carla::sensor::SensorRegistry::get<TSensor *>::type::header_offset,
             InRHICmdList);
-        Stream.Send(Sensor, std::move(Buffer));
+
+        if(Buffer.data())
+        {
+          SCOPE_CYCLE_COUNTER(STAT_CarlaSensorStreamSend);
+          Stream.Send(Sensor, std::move(Buffer));
+        }
       }
     }
   );

@@ -70,8 +70,8 @@ __The world object is responsible of spawning actors and keeping track of these.
 
 The world has two different methods to spawn actors.  
 
-* [`spawn_actor()`](python_api.md#carla.World.spawn_actor) returns `None` if the spawning failed.  
-* [`try_spawn_actor()`](python_api.md#carla.World.try_spawn_actor) raises an exception if the spawning failed.  
+* [`spawn_actor()`](python_api.md#carla.World.spawn_actor) raises an exception if the spawning fails.
+* [`try_spawn_actor()`](python_api.md#carla.World.try_spawn_actor) returns `None` if the spawning fails.
 
 ```py
 transform = Transform(Location(x=230, y=195, z=40), Rotation(yaw=180))
@@ -93,7 +93,7 @@ spawn_point = carla.Transform()
 spawn_point.location = world.get_random_location_from_navigation()
 ```
 
-An actor can be attached to another one when spawned. Actors follow the parent they are attached to. This is specially useful for sensors. The attachment can be rigid or eased. It is defined by the helper class [carla.AttachmentType](python_api.md#carla.AttachmentType).  
+An actor can be attached to another one when spawned. Actors follow the parent they are attached to. This is specially useful for sensors. The attachment can be rigid (proper to retrieve precise data) or with an eased movement according to its parent. It is defined by the helper class [carla.AttachmentType](python_api.md#carla.AttachmentType).  
 
 The next example attaches a camera rigidly to a vehicle, so their relative position remains fixed. 
 

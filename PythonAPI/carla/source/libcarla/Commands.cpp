@@ -144,6 +144,13 @@ void export_commands() {
     .def_readwrite("impulse", &cr::Command::ApplyImpulse::impulse)
   ;
 
+  class_<cr::Command::ApplyAngularImpulse>("ApplyAngularImpulse")
+    .def("__init__", &command_impl::CustomInit<ActorPtr, cg::Vector3D>, (arg("actor"), arg("impulse")))
+    .def(init<cr::ActorId, cg::Vector3D>((arg("actor_id"), arg("impulse"))))
+    .def_readwrite("actor_id", &cr::Command::ApplyAngularImpulse::actor)
+    .def_readwrite("impulse", &cr::Command::ApplyAngularImpulse::impulse)
+  ;
+
   class_<cr::Command::SetSimulatePhysics>("SetSimulatePhysics")
     .def("__init__", &command_impl::CustomInit<ActorPtr, bool>, (arg("actor"), arg("enabled")))
     .def(init<cr::ActorId, bool>((arg("actor_id"), arg("enabled"))))
@@ -159,6 +166,13 @@ void export_commands() {
     .def_readwrite("enabled", &cr::Command::SetAutopilot::enabled)
   ;
 
+  class_<cr::Command::SetVehicleLightState>("SetVehicleLightState")
+    .def("__init__", &command_impl::CustomInit<ActorPtr, bool>, (arg("actor"), arg("light_state")))
+    .def(init<cr::ActorId, cr::VehicleLightState::flag_type>((arg("actor_id"), arg("light_state"))))
+    .def_readwrite("actor_id", &cr::Command::SetVehicleLightState::actor)
+    .def_readwrite("light_state", &cr::Command::SetVehicleLightState::light_state)
+  ;
+
   implicitly_convertible<cr::Command::SpawnActor, cr::Command>();
   implicitly_convertible<cr::Command::DestroyActor, cr::Command>();
   implicitly_convertible<cr::Command::ApplyVehicleControl, cr::Command>();
@@ -168,6 +182,8 @@ void export_commands() {
   implicitly_convertible<cr::Command::ApplyVelocity, cr::Command>();
   implicitly_convertible<cr::Command::ApplyAngularVelocity, cr::Command>();
   implicitly_convertible<cr::Command::ApplyImpulse, cr::Command>();
+  implicitly_convertible<cr::Command::ApplyAngularImpulse, cr::Command>();
   implicitly_convertible<cr::Command::SetSimulatePhysics, cr::Command>();
   implicitly_convertible<cr::Command::SetAutopilot, cr::Command>();
+  implicitly_convertible<cr::Command::SetVehicleLightState, cr::Command>();
 }

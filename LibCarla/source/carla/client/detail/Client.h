@@ -24,6 +24,7 @@
 #include "carla/rpc/VehicleLightState.h"
 #include "carla/rpc/WeatherParameters.h"
 #include "carla/rpc/OpendriveGenerationParameters.h"
+#include "carla/rpc/VehicleLightStateList.h"
 
 #include <functional>
 #include <memory>
@@ -87,8 +88,6 @@ namespace detail {
     std::string GetServerVersion();
 
     void LoadEpisode(std::string map_name);
-
-    bool CheckIntermediateEpisode();
 
     void CopyOpenDriveToServer(
         std::string opendrive, const rpc::OpendriveGenerationParameters & params);
@@ -159,6 +158,10 @@ namespace detail {
         rpc::ActorId actor,
         const geom::Vector3D &vector);
 
+    void AddActorAngularImpulse(
+        rpc::ActorId actor,
+        const geom::Vector3D &vector);
+
     void SetActorSimulatePhysics(
         rpc::ActorId actor,
         bool enabled);
@@ -199,10 +202,19 @@ namespace detail {
         rpc::ActorId traffic_light,
         bool freeze);
 
+    void ResetTrafficLightGroup(
+        rpc::ActorId traffic_light);
+
+    void FreezeAllTrafficLights(bool frozen);
+
+    /// Returns a list of pairs where the firts element is the vehicle ID
+    /// and the second one is the light state
+    rpc::VehicleLightStateList GetVehiclesLightStates();
+
     std::vector<ActorId> GetGroupTrafficLights(
         rpc::ActorId traffic_light);
 
-    std::string StartRecorder(std::string name);
+    std::string StartRecorder(std::string name, bool additional_data);
 
     void StopRecorder();
 
@@ -217,6 +229,8 @@ namespace detail {
     void SetReplayerTimeFactor(double time_factor);
 
     void SetReplayerIgnoreHero(bool ignore_hero);
+
+    void StopReplayer(bool keep_actors);
 
     void SubscribeToStream(
         const streaming::Token &token,

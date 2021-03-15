@@ -54,7 +54,7 @@ Used:<br>
 
 ```py
 # ...
-camera = world.spawn_actor(rgb_camera_bp, transform, attach_to=vehicle, attachment_type=Attachment.SpringArm)
+camera = world.spawn_actor(rgb_camera_bp, transform, attach_to=vehicle, attachment_type=Attachment.Rigid)
 # Default attachment:  Attachment.Rigid
 gnss_sensor = world.spawn_actor(sensor_gnss_bp, transform, attach_to=vehicle)
 collision_sensor = world.spawn_actor(sensor_collision_bp, transform, attach_to=vehicle)
@@ -143,7 +143,7 @@ print("R lane marking change: " + str(waypoint.right_lane_marking.lane_change))
 # ...
 ```
 
-![lane_marking_recipe](img/lane_marking_recipe.png)
+![lane_marking_recipe](img/recipe_lane_marking.jpg)
 
 ---
 ## Debug Bounding Box Recipe
@@ -172,7 +172,7 @@ for actor_snapshot in world_snapshot:
 # ...
 ```
 
-![debug_bb_recipe](img/debug_bb_recipe.png)
+![debug_bb_recipe](img/recipe_debug_bb.jpg)
 
 ---
 ## Debug Vehicle Trail Recipe
@@ -219,7 +219,7 @@ while True:
 The image below shows how a vehicle loses control and drives on a sidewalk. The trail shows the
 path it was following and the speed at each waypoint.
 
-![debug_trail_recipe](img/debug_trail_recipe.png)
+![debug_trail_recipe](img/recipe_debug_trail.jpg)
 
 ---
 ## Parse client creation arguments

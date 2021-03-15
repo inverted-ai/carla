@@ -17,6 +17,8 @@
 #include <ostream>
 #include <iostream>
 
+namespace ctm = carla::traffic_manager;
+
 namespace carla {
 namespace client {
 
@@ -86,6 +88,7 @@ void export_actor() {
       .def("set_velocity", &cc::Actor::SetVelocity, (arg("vector")))
       .def("set_angular_velocity", &cc::Actor::SetAngularVelocity, (arg("vector")))
       .def("add_impulse", &cc::Actor::AddImpulse, (arg("vector")))
+      .def("add_angular_impulse", &cc::Actor::AddAngularImpulse, (arg("vector")))
       .def("set_simulate_physics", &cc::Actor::SetSimulatePhysics, (arg("enabled") = true))
       .def("destroy", CALL_WITHOUT_GIL(cc::Actor, Destroy))
       .def(self_ns::str(self_ns::self))
@@ -116,7 +119,7 @@ void export_actor() {
       .def("get_light_state", CONST_CALL_WITHOUT_GIL(cc::Vehicle, GetLightState))
       .def("apply_physics_control", &cc::Vehicle::ApplyPhysicsControl, (arg("physics_control")))
       .def("get_physics_control", CONST_CALL_WITHOUT_GIL(cc::Vehicle, GetPhysicsControl))
-      .def("set_autopilot", CALL_WITHOUT_GIL_2(cc::Vehicle, SetAutopilot, bool, uint16_t), (arg("enabled") = true, arg("tm_port") = TM_DEFAULT_PORT))
+      .def("set_autopilot", CALL_WITHOUT_GIL_2(cc::Vehicle, SetAutopilot, bool, uint16_t), (arg("enabled") = true, arg("tm_port") = ctm::TM_DEFAULT_PORT))
       .def("get_speed_limit", &cc::Vehicle::GetSpeedLimit)
       .def("get_traffic_light_state", &cc::Vehicle::GetTrafficLightState)
       .def("is_at_traffic_light", &cc::Vehicle::IsAtTrafficLight)
@@ -171,6 +174,7 @@ void export_actor() {
       .def("is_frozen", &cc::TrafficLight::IsFrozen)
       .def("get_pole_index", &cc::TrafficLight::GetPoleIndex)
       .def("get_group_traffic_lights", &GetGroupTrafficLights)
+      .def("reset_group", &cc::TrafficLight::ResetGroup)
       .def(self_ns::str(self_ns::self))
   ;
 }

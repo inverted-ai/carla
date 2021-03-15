@@ -64,6 +64,46 @@ Many different issues can be dragged during the build installation, and show lik
 Other specific reasons for a system to show conflicts with CARLA may occur. Please, post these on the forum so the team can get to know more about them.   
   </details>
 
+<!-- ======================================================================= -->
+  <details>
+    <summary><h5 style="display:inline">
+    Cloning the Unreal Engine repository shows an error.
+    </h5></summary>
+
+__1. Is the Unreal Engine account activated?__ The UE repository is private. In order to clone it, create the [UE](https://www.unrealengine.com/en-US/) account, activate it (check the verification mail), and [link your GitHub](https://www.unrealengine.com/en-US/blog/updated-authentication-process-for-connecting-epic-github-accounts) account.  
+
+__2. Is git properly installated?__ Sometimes an error shows incompatibilities with the `https` protocol. It can be solved easily by uninstalling and reinstalling git. Open a terminal and run the following commands.  
+```sh
+sudo apt-get remove git #Uninstall git
+sudo apt install git-all #install git
+```
+
+  </details>
+
+<!-- ======================================================================= -->
+  <details>
+    <summary><h5 style="display:inline">
+    AttributeError: module 'carla' has no attribute 'Client' when running a script. 
+    </h5></summary>
+
+Run the following command. 
+```sh
+pip3 install -Iv setuptools==47.3.1
+``` 
+
+And build the PythonAPI again. 
+```sh
+make PythonAPI
+```
+
+Try to build the docs to test if everything is running properly. A successful message should show. 
+```sh
+make PythonAPI.docs
+```
+
+  </details>
+
+
 ---
 ## Windows build
 
@@ -89,6 +129,21 @@ __1.__ Go to `carla/Unreal/CarlaUE4` and right-click the `CarlaUE4.uproject`.
 __2.__ Click on __Generate Visual Studio project files__.  
 __3.__ Open the file generated with Visual Studio 2017.  
 __4.__ Compile the project with Visual Studio. The shortcut is F7. The build will fail, but the issues found will be shown below.
+
+Different issues may result in this specific error message. The user [@tamakoji](https://github.com/tamakoji) solved a recurrent case where the source code hadn't been cloned properly and the CARLA version could not be set (when downloading this as a .zip from git).  
+
+*   __Check the `Build/CMakeLists.txt.in`.__ If it shows like `set(CARLA_VERSION )` do the following.  
+
+__1.__ Go to `Setup.bat` line 198.  
+
+__2.__ Update the line from: 
+```sh
+for /f %%i in ('git describe --tags --dirty --always') do set carla_version=%%i
+```
+to:
+```sh
+for /f %%i in ('git describe --tags --dirty --always') do set carla_version="0.9.9"
+```
   </details>
 
 <!-- ======================================================================= -->
