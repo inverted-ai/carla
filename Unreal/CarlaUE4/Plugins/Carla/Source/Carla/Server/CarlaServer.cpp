@@ -16,6 +16,8 @@
 #include "Carla/Walker/WalkerBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Carla/Game/Tagger.h"
+#include "Carla/Vehicle/MovementComponents/CarSimManagerComponent.h"
+#include "Carla/Vehicle/MovementComponents/ChronoMovementComponent.h"
 
 #include <compiler/disable-ue4-macros.h>
 #include <carla/Functional.h>
@@ -45,6 +47,7 @@
 #include <carla/rpc/VehicleLightStateList.h>
 #include <carla/rpc/WalkerBoneControl.h>
 #include <carla/rpc/WalkerControl.h>
+#include <carla/rpc/VehicleWheels.h>
 #include <carla/rpc/WeatherParameters.h>
 #include <carla/streaming/Server.h>
 #include <compiler/enable-ue4-macros.h>
@@ -491,7 +494,7 @@ void FCarlaServer::FPimpl::BindActions()
     return Episode->SerializeActor(Result.Value);
   };
 
-  BIND_SYNC(destroy_actor) << [this](cr::ActorId ActorId) -> R<void>
+  BIND_SYNC(destroy_actor) << [this](cr::ActorId ActorId) -> R<bool>
   {
     REQUIRE_CARLA_EPISODE();
     auto ActorView = Episode->FindActor(ActorId);
@@ -503,7 +506,7 @@ void FCarlaServer::FPimpl::BindActions()
     {
       RESPOND_ERROR("internal error: unable to destroy actor");
     }
-    return R<void>::Success();
+    return true;
   };
 
   // ~~ Actor physics ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -904,6 +907,49 @@ void FCarlaServer::FPimpl::BindActions()
     return R<void>::Success();
   };
 
+  BIND_SYNC(set_wheel_steer_direction) << [this](
+    cr::ActorId ActorId,
+    cr::VehicleWheelLocation WheelLocation,
+    float AngleInDeg) -> R<void>
+  {
+
+    REQUIRE_CARLA_EPISODE();
+    auto ActorView = Episode->FindActor(ActorId);
+    if(!ActorView.IsValid()){
+
+      RESPOND_ERROR("unable to apply actor wheel steer : actor not found");
+    }
+
+    auto Vehicle = Cast<ACarlaWheeledVehicle>(ActorView.GetActor());
+    if(Vehicle == nullptr){
+
+      RESPOND_ERROR("unable to apply actor wheel steer : actor is not a vehicle");
+    }
+
+    Vehicle->SetWheelSteerDirection((VehicleWheelLocation)WheelLocation, AngleInDeg);
+    return R<void>::Success();
+  };
+
+  BIND_SYNC(get_wheel_steer_angle) << [this](
+      const cr::ActorId ActorId,
+      cr::VehicleWheelLocation WheelLocation) -> R<float>
+  {
+    REQUIRE_CARLA_EPISODE();
+    auto ActorView = Episode->FindActor(ActorId);
+    if(!ActorView.IsValid()){
+
+      RESPOND_ERROR("unable to get actor wheel angle : actor not found");
+    }
+
+    auto Vehicle = Cast<ACarlaWheeledVehicle>(ActorView.GetActor());
+    if(Vehicle == nullptr){
+
+      RESPOND_ERROR("unable to get actor wheel angle : actor is not a vehicle");
+    }
+
+    return Vehicle->GetWheelSteerAngle((VehicleWheelLocation)WheelLocation);
+  };
+
   BIND_SYNC(set_actor_simulate_physics) << [this](
       cr::ActorId ActorId,
       bool bEnabled) -> R<void>
@@ -915,10 +961,15 @@ void FCarlaServer::FPimpl::BindActions()
       RESPOND_ERROR("unable to set actor simulate physics: actor not found");
     }
 
-    auto Character = Cast<ACharacter>(ActorView.GetActor());
-    // The physics in the walkers works in a different way so to disable them,
+    auto* Character = Cast<ACharacter>(ActorView.GetActor());
+    auto* CarlaVehicle = Cast<ACarlaWheeledVehicle>(ActorView.GetActor());
+    // The physics in the vehicles works in a different way so to disable them.
+    if (CarlaVehicle != nullptr){
+      CarlaVehicle->SetSimulatePhysics(bEnabled);
+    }
+    // The physics in the walkers also works in a different way so to disable them,
     // we need to do it in the UCharacterMovementComponent.
-    if (Character != nullptr)
+    else if (Character != nullptr)
     {
       auto CharacterMovement = Cast<UCharacterMovementComponent>(Character->GetCharacterMovement());
 
@@ -938,23 +989,9 @@ void FCarlaServer::FPimpl::BindActions()
       {
         RESPOND_ERROR("unable to set actor simulate physics: not supported by actor");
       }
-      auto Vehicle = Cast<ACarlaWheeledVehicle>(ActorView.GetActor());
-      if(Vehicle)
-      {
-        Vehicle->SetActorEnableCollision(true);
-        #ifdef WITH_CARSIM
-        if(!Vehicle->IsCarSimEnabled())
-        #endif
-        {
-          RootComponent->SetSimulatePhysics(bEnabled);
-          RootComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-        }
-      }
-      else
-      {
-        RootComponent->SetSimulatePhysics(bEnabled);
-        RootComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-      }
+
+      RootComponent->SetSimulatePhysics(bEnabled);
+      RootComponent->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
     }
 
     return R<void>::Success();
@@ -1094,12 +1131,10 @@ void FCarlaServer::FPimpl::BindActions()
     return R<void>::Success();
   };
 
-//-----CARSIM--------------------------------
   BIND_SYNC(enable_carsim) << [this](
       cr::ActorId ActorId,
       std::string SimfilePath) -> R<void>
   {
-    #ifdef WITH_CARSIM
     REQUIRE_CARLA_EPISODE();
     auto ActorView = Episode->FindActor(ActorId);
     if (!ActorView.IsValid())
@@ -1111,22 +1146,14 @@ void FCarlaServer::FPimpl::BindActions()
     {
       RESPOND_ERROR("unable to set carsim: not actor is not a vehicle");
     }
-    if (Vehicle->IsCarSimEnabled())
-    {
-      RESPOND_ERROR("unable to set carsim: carsim is already enabled");
-    }
-    Vehicle->EnableCarSim(carla::rpc::ToFString(SimfilePath));
+    UCarSimManagerComponent::CreateCarsimComponent(Vehicle, carla::rpc::ToFString(SimfilePath));
     return R<void>::Success();
-    #else
-      RESPOND_ERROR("CarSim plugin is not enabled");
-    #endif
   };
 
   BIND_SYNC(use_carsim_road) << [this](
       cr::ActorId ActorId,
       bool bEnabled) -> R<void>
   {
-    #ifdef WITH_CARSIM
     REQUIRE_CARLA_EPISODE();
     auto ActorView = Episode->FindActor(ActorId);
     if (!ActorView.IsValid())
@@ -1138,13 +1165,49 @@ void FCarlaServer::FPimpl::BindActions()
     {
       RESPOND_ERROR("unable to set carsim road: not actor is not a vehicle");
     }
-    Vehicle->UseCarSimRoad(bEnabled);
+    auto* CarSimComponent = Vehicle->GetCarlaMovementComponent<UCarSimManagerComponent>();
+    if(CarSimComponent)
+    {
+      CarSimComponent->UseCarSimRoad(bEnabled);
+    }
+    else
+    {
+      RESPOND_ERROR("UCarSimManagerComponent plugin is not activated");
+    }
     return R<void>::Success();
-    #else
-    RESPOND_ERROR("CarSim plugin is not enabled");
-    #endif
   };
-//-----CARSIM--------------------------------
+
+  BIND_SYNC(enable_chrono_physics) << [this](
+      cr::ActorId ActorId,
+      uint64_t MaxSubsteps,
+      float MaxSubstepDeltaTime,
+      std::string VehicleJSON,
+      std::string PowertrainJSON,
+      std::string TireJSON,
+      std::string BaseJSONPath) -> R<void>
+  {
+    REQUIRE_CARLA_EPISODE();
+    auto ActorView = Episode->FindActor(ActorId);
+    if (!ActorView.IsValid())
+    {
+      RESPOND_ERROR("unable to set chrono physics: actor not found");
+    }
+    auto Vehicle = Cast<ACarlaWheeledVehicle>(ActorView.GetActor());
+    if (Vehicle == nullptr)
+    {
+      RESPOND_ERROR("unable to set chrono physics: not actor is not a vehicle");
+    }
+    UChronoMovementComponent::CreateChronoMovementComponent(
+        Vehicle,
+        MaxSubsteps,
+        MaxSubstepDeltaTime,
+        cr::ToFString(VehicleJSON),
+        cr::ToFString(PowertrainJSON),
+        cr::ToFString(TireJSON),
+        cr::ToFString(BaseJSONPath));
+    return R<void>::Success();
+  };
+
   // ~~ Traffic lights ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
   BIND_SYNC(set_traffic_light_state) << [this](
