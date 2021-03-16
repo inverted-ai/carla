@@ -6,23 +6,24 @@
 
 #pragma once
 
-#include "Carla/Actor/CarlaActorFactory.h"
-#include "Carla/Game/CarlaEpisode.h"
-#include "Carla/Game/CarlaGameInstance.h"
-#include "Carla/Recorder/CarlaRecorder.h"
-#include "Carla/Game/TaggerDelegate.h"
-#include "Carla/OpenDrive/OpenDrive.h"
-#include "Carla/Sensor/SceneCaptureSensor.h"
-#include "Carla/Settings/CarlaSettingsDelegate.h"
-#include "Carla/Weather/Weather.h"
-#include "Carla/Traffic/TrafficLightManager.h"
-
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
 
 #include <compiler/disable-ue4-macros.h>
 #include <boost/optional.hpp>
 #include <compiler/enable-ue4-macros.h>
+
+#include "Carla/Actor/CarlaActorFactory.h"
+#include "Carla/Game/CarlaEpisode.h"
+#include "Carla/Game/CarlaGameInstance.h"
+#include "Carla/Game/TaggerDelegate.h"
+#include "Carla/OpenDrive/OpenDrive.h"
+#include "Carla/Recorder/CarlaRecorder.h"
+#include "Carla/Sensor/SceneCaptureSensor.h"
+#include "Carla/Settings/CarlaSettingsDelegate.h"
+#include "Carla/Traffic/TrafficLightManager.h"
+#include "Carla/Util/ObjectRegister.h"
+#include "Carla/Weather/Weather.h"
 
 #include "CarlaGameModeBase.generated.h"
 
@@ -52,74 +53,31 @@ public:
   UFUNCTION(BlueprintCallable, Category = "CARLA Game Mode")
   ATrafficLightManager* GetTrafficLightManager();
 
-  void AddSceneCaptureSensor(ASceneCaptureSensor* SceneCaptureSensor);
+  UFUNCTION(Category = "Carla Game Mode", BlueprintCallable, CallInEditor, Exec)
+  TArray<FBoundingBox> GetAllBBsOfLevel(uint8 TagQueried = 0xFF) const;
 
-  void RemoveSceneCaptureSensor(ASceneCaptureSensor* SceneCaptureSensor);
-
-  bool IsCameraAtlasTextureValid() const
+  UFUNCTION(Category = "Carla Game Mode", BlueprintCallable, CallInEditor, Exec)
+  TArray<FEnvironmentObject> GetEnvironmentObjects(uint8 QueriedTag = 0xFF) const
   {
-    return IsAtlasTextureValid;
+    return ObjectRegister->GetEnvironmentObjects(QueriedTag);
   }
 
-  FTexture2DRHIRef GetCurrentCamerasAtlasTexture() const{
-    return CamerasAtlasTexture;
-  }
+  void EnableEnvironmentObjects(const TSet<uint64>& EnvObjectIds, bool Enable);
 
-  uint32 GetAtlasTextureWidth() const {
-    return AtlasTextureWidth;
-  }
+  UFUNCTION(Category = "Carla Game Mode", BlueprintCallable, CallInEditor, Exec)
+  void LoadMapLayer(int32 MapLayers);
 
-  uint32 GetAtlasTextureHeight() const {
-    return AtlasTextureHeight;
-  }
+  UFUNCTION(Category = "Carla Game Mode", BlueprintCallable, CallInEditor, Exec)
+  void UnLoadMapLayer(int32 MapLayers);
 
-  UFUNCTION(Exec)
-  void SwitchReadSurfaceMode(uint32 Mode) {
-#if !UE_BUILD_SHIPPING
-    ReadSurfaceMode = Mode;
-#endif
-  }
+  UFUNCTION(Category = "Carla Game Mode")
+  ULevel* GetULevelFromName(FString LevelName);
 
-  UFUNCTION(Exec)
-  void SetAtlasSurface(uint32 W, uint32 H) {
-#if !UE_BUILD_SHIPPING
-    SurfaceW = W;
-    SurfaceH = H;
-#endif
-  }
+  UFUNCTION(BlueprintCallable, Category = "Carla Game Mode")
+  void OnLoadStreamLevel();
 
-  UFUNCTION(Exec)
-  void EnableCameraCopyToAtlas(bool Enable) {
-#if !UE_BUILD_SHIPPING
-    CameraCopyToAtlasEnable = Enable;
-#endif
-  }
-
-  UFUNCTION(Exec)
-  void EnableAtlasCopyToCamera(bool Enable) {
-#if !UE_BUILD_SHIPPING
-    AtlasCopyToCamera = Enable;
-#endif
-  }
-
-  UFUNCTION(Exec)
-  void EnableCameraStream(bool Enable) {
-#if !UE_BUILD_SHIPPING
-    CameraStreamEnable = Enable;
-#endif
-  }
-
-#if !UE_BUILD_SHIPPING
-
-  bool IsCameraCopyToAtlasEnabled() const {
-    return CameraCopyToAtlasEnable;
-  }
-
-  bool IsCameraStreamEnabled() const {
-    return CameraStreamEnable;
-  }
-
-#endif
+  UFUNCTION(BlueprintCallable, Category = "Carla Game Mode")
+  void OnUnloadStreamLevel();
 
 protected:
 
@@ -139,11 +97,11 @@ private:
 
   void ParseOpenDrive(const FString &MapName);
 
-  void CreateAtlasTextures();
+  void RegisterEnvironmentObjects();
 
-  void CaptureAtlas();
+  void ConvertMapLayerMaskToMapNames(int32 MapLayer, TArray<FName>& OutLevelNames);
 
-  void SendAtlas();
+  void OnEpisodeSettingsChanged(const FEpisodeSettings &Settings);
 
   UPROPERTY()
   UCarlaGameInstance *GameInstance = nullptr;
@@ -160,6 +118,9 @@ private:
   UPROPERTY()
   ACarlaRecorder *Recorder = nullptr;
 
+  UPROPERTY()
+  UObjectRegister* ObjectRegister = nullptr;
+
   /// The class of Weather to spawn.
   UPROPERTY(Category = "CARLA Game Mode", EditAnywhere)
   TSubclassOf<AWeather> WeatherClass;
@@ -175,25 +136,13 @@ private:
   UPROPERTY()
   ATrafficLightManager* TrafficLightManager = nullptr;
 
+  FDelegateHandle OnEpisodeSettingsChangeHandle;
+
   boost::optional<carla::road::Map> Map;
 
-  FDelegateHandle CaptureAtlasDelegate;
+  int PendingLevelsToLoad = 0;
+  int PendingLevelsToUnLoad = 0;
 
-  TArray<ASceneCaptureSensor*> SceneCaptureSensors;
-  FTexture2DRHIRef CamerasAtlasTexture;
-  TArray<FColor> AtlasImage;
-  uint32 AtlasTextureWidth = 0u;
-  uint32 AtlasTextureHeight = 0u;
-  uint32 CurrentAtlasTextureHeight = 0u;
-  bool IsAtlasTextureValid = false;
-
-#if !UE_BUILD_SHIPPING
-  uint32 ReadSurfaceMode = 1;
-  uint32 SurfaceW = 0;
-  uint32 SurfaceH = 0;
-  bool CameraCopyToAtlasEnable = true;
-  bool AtlasCopyToCamera = true;
-  bool CameraStreamEnable = true;
-#endif
+  bool ReadyToRegisterObjects = false;
 
 };

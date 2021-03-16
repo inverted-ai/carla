@@ -163,6 +163,15 @@ public:
         tm->SetHybridPhysicsRadius(radius);
       });
 
+      /// Method to set hybrid physics radius.
+      server->bind("set_osm_mode", [=](const bool mode_switch) {
+        tm->SetHybridPhysicsRadius(mode_switch);
+      });
+
+      server->bind("shut_down", [=]() {
+        tm->Release();
+      });
+
       /// Method to set synchronous mode.
       server->bind("set_synchronous_mode", [=](const bool mode) {
         tm->SetSynchronousMode(mode);
@@ -173,14 +182,14 @@ public:
         tm->SetSynchronousModeTimeOutInMiliSecond(time);
       });
 
+      /// Method to set randomization seed.
+      server->bind("set_random_device_seed", [=](const uint64_t seed) {
+        tm->SetRandomDeviceSeed(seed);
+      });
+
       /// Method to provide synchronous tick.
       server->bind("synchronous_tick", [=]() -> bool {
         return tm->SynchronousTick();
-      });
-
-      /// Method to reset all traffic lights.
-      server->bind("reset_all_traffic_lights", [=]() {
-        tm->ResetAllTrafficLights();
       });
 
       /// Method to check server is alive or not.

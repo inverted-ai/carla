@@ -1,8 +1,5 @@
 # How to generate the pedestrian navigation info
 
----
-## Introduction
-
 The pedestrians to walk need information about the map in a specific format. That file that describes the map for navigation is a binary file with extension `.BIN`, and they are saved in the **Nav** folder of the map. Each map needs a `.BIN` file with the same name that the map, so automatically can be loaded with the map.
 
 This `.BIN` file is generated from the Recast & Detour library and has all the information that allows pathfinding and crow management.
@@ -18,13 +15,15 @@ If we need to generate this `.BIN` file for a custom map, we need to follow this
 
 We have several types of meshes for navigation. The meshes need to be identified as one of those types, using specific nomenclature.
 
-| Type      | Start with | Description |
-|-----------|------------|-------------|
-| Ground    | `Road_Sidewalk` | Pedestrians can walk over these meshes freely (sidewalks...). |
-| Grass     | `Road_Crosswalk` | Pedestrians can walk over these meshes but as a second option if no ground is found. |
-| Road      | `Road_Grass` | Pedestrians won't be allowed to walk on it unless we specify some percentage of pedestrians that will be allowed. |
-| Crosswalk | `Road_Road`, `Road_Curb`, `Road_Gutter` or `Road_Marking` | Pedestrians can cross the roads only through these meshes. |
-| Block     | any other name | Pedestrians will avoid these meshes always (are obstacles like traffic lights, trees, houses...). |  
+| Type                                                                                                              | Start with                                                                                                        | Description                                                                                                       |
+| ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Ground                                                                                                            | `Road_Sidewalk`                                                                                                   | Pedestrians can walk over these meshes freely (sidewalks...).                                                     |
+| Grass                                                                                                             | `Road_Crosswalk`                                                                                                  | Pedestrians can walk over these meshes but as a second option if no ground is found.                              |
+| Road                                                                                                              | `Road_Grass`                                                                                                      | Pedestrians won't be allowed to walk on it unless we specify some percentage of pedestrians that will be allowed. |
+| Crosswalk                                                                                                         | `Road_Road`, `Road_Curb`, `Road_Gutter`, `Road_Marking`                                                           | Pedestrians can cross the roads only through these meshes.                                                        |
+| Block                                                                                                             | Any other name                                                                                                    | Pedestrians will avoid these meshes always (are obstacles like traffic lights, trees, houses...).                 |
+
+
 
 <br>
 

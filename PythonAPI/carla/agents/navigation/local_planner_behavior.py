@@ -14,21 +14,8 @@ from enum import Enum
 
 import carla
 from agents.navigation.controller import VehiclePIDController
+from agents.navigation.local_planner import RoadOption
 from agents.tools.misc import distance_vehicle, draw_waypoints
-
-
-class RoadOption(Enum):
-    """
-    RoadOption represents the possible topological configurations
-    when moving from a segment of lane to other.
-    """
-    VOID = -1
-    LEFT = 1
-    RIGHT = 2
-    STRAIGHT = 3
-    LANEFOLLOW = 4
-    CHANGELANELEFT = 5
-    CHANGELANERIGHT = 6
 
 
 class LocalPlanner(object):
@@ -65,7 +52,7 @@ class LocalPlanner(object):
         self._next_waypoints = None
         self.target_waypoint = None
         self._vehicle_controller = None
-        self._global_plan = None
+        self._stop_waypoint_creation = None
         self._pid_controller = None
         self.waypoints_queue = deque(maxlen=20000)  # queue with tuples of (waypoint, RoadOption)
         self._buffer_size = 5
@@ -120,7 +107,7 @@ class LocalPlanner(object):
 
         self._current_waypoint = self._map.get_waypoint(self._vehicle.get_location())
 
-        self._global_plan = False
+        self._stop_waypoint_creation = False
 
         self._target_speed = self._vehicle.get_speed_limit()
 
@@ -135,15 +122,27 @@ class LocalPlanner(object):
 
         self._target_speed = speed
 
-    def set_global_plan(self, current_plan):
+    def set_global_plan(self, current_plan, clean=False, stop_waypoint_creation=True):
         """
         Sets new global plan.
 
             :param current_plan: list of waypoints in the actual plan
+            :param clean: bool
+            :param stop_waypoint_creation: bool
         """
         for elem in current_plan:
             self.waypoints_queue.append(elem)
-        self._global_plan = True
+
+        if clean:
+            self._waypoint_buffer.clear()
+            for _ in range(self._buffer_size):
+                if self.waypoints_queue:
+                    self._waypoint_buffer.append(
+                        self.waypoints_queue.popleft())
+                else:
+                    break
+
+        self._stop_waypoint_creation = stop_waypoint_creation
 
     def get_incoming_waypoint_and_direction(self, steps=3):
         """

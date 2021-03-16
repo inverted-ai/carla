@@ -140,9 +140,19 @@ namespace detail {
     return _pimpl->CallAndWait<std::string>("version");
   }
 
-  void Client::LoadEpisode(std::string map_name) {
+  void Client::LoadEpisode(std::string map_name, bool reset_settings, rpc::MapLayer map_layer) {
     // Await response, we need to be sure in this one.
-    _pimpl->CallAndWait<void>("load_new_episode", std::move(map_name));
+    _pimpl->CallAndWait<void>("load_new_episode", std::move(map_name), reset_settings, map_layer);
+  }
+
+  void Client::LoadLevelLayer(rpc::MapLayer map_layer) const {
+    // Await response, we need to be sure in this one.
+    _pimpl->CallAndWait<void>("load_map_layer", map_layer);
+  }
+
+  void Client::UnloadLevelLayer(rpc::MapLayer map_layer) const {
+    // Await response, we need to be sure in this one.
+    _pimpl->CallAndWait<void>("unload_map_layer", map_layer);
   }
 
   void Client::CopyOpenDriveToServer(std::string opendrive, const rpc::OpendriveGenerationParameters & params) {
@@ -218,6 +228,19 @@ namespace detail {
     return _pimpl->AsyncCall("set_vehicle_light_state", vehicle, light_state);
   }
 
+  void Client::SetWheelSteerDirection(
+        rpc::ActorId vehicle, 
+        rpc::VehicleWheelLocation vehicle_wheel,
+        float angle_in_deg){
+    return _pimpl->AsyncCall("set_wheel_steer_direction", vehicle, vehicle_wheel, angle_in_deg);
+  }
+
+  float Client::GetWheelSteerAngle(
+        rpc::ActorId vehicle,
+        rpc::VehicleWheelLocation wheel_location){
+    return _pimpl->CallAndWait<float>("get_wheel_steer_angle", vehicle, wheel_location);
+  }
+
   rpc::Actor Client::SpawnActor(
       const rpc::ActorDescription &description,
       const geom::Transform &transform) {
@@ -249,7 +272,7 @@ namespace detail {
 
   bool Client::DestroyActor(rpc::ActorId actor) {
     try {
-      return _pimpl->CallAndWait<void>("destroy_actor", actor);
+      return _pimpl->CallAndWait<bool>("destroy_actor", actor);
     } catch (const std::exception &e) {
       log_error("failed to destroy actor", actor, ':', e.what());
       return false;
@@ -264,24 +287,52 @@ namespace detail {
     _pimpl->AsyncCall("set_actor_transform", actor, transform);
   }
 
-  void Client::SetActorVelocity(rpc::ActorId actor, const geom::Vector3D &vector) {
-    _pimpl->AsyncCall("set_actor_velocity", actor, vector);
+  void Client::SetActorTargetVelocity(rpc::ActorId actor, const geom::Vector3D &vector) {
+    _pimpl->AsyncCall("set_actor_target_velocity", actor, vector);
   }
 
-  void Client::SetActorAngularVelocity(rpc::ActorId actor, const geom::Vector3D &vector) {
-    _pimpl->AsyncCall("set_actor_angular_velocity", actor, vector);
+  void Client::SetActorTargetAngularVelocity(rpc::ActorId actor, const geom::Vector3D &vector) {
+    _pimpl->AsyncCall("set_actor_target_angular_velocity", actor, vector);
   }
 
-  void Client::AddActorImpulse(rpc::ActorId actor, const geom::Vector3D &vector) {
-    _pimpl->AsyncCall("add_actor_impulse", actor, vector);
+  void Client::EnableActorConstantVelocity(rpc::ActorId actor, const geom::Vector3D &vector) {
+    _pimpl->AsyncCall("enable_actor_constant_velocity", actor, vector);
+  }
+
+  void Client::DisableActorConstantVelocity(rpc::ActorId actor) {
+    _pimpl->AsyncCall("disable_actor_constant_velocity", actor);
+  }
+
+  void Client::AddActorImpulse(rpc::ActorId actor, const geom::Vector3D &impulse) {
+    _pimpl->AsyncCall("add_actor_impulse", actor, impulse);
+  }
+
+  void Client::AddActorImpulse(rpc::ActorId actor, const geom::Vector3D &impulse, const geom::Vector3D &location) {
+    _pimpl->AsyncCall("add_actor_impulse_at_location", actor, impulse, location);
+  }
+
+  void Client::AddActorForce(rpc::ActorId actor, const geom::Vector3D &force) {
+    _pimpl->AsyncCall("add_actor_force", actor, force);
+  }
+
+  void Client::AddActorForce(rpc::ActorId actor, const geom::Vector3D &force, const geom::Vector3D &location) {
+    _pimpl->AsyncCall("add_actor_force_at_location", actor, force, location);
   }
 
   void Client::AddActorAngularImpulse(rpc::ActorId actor, const geom::Vector3D &vector) {
     _pimpl->AsyncCall("add_actor_angular_impulse", actor, vector);
   }
 
+  void Client::AddActorTorque(rpc::ActorId actor, const geom::Vector3D &vector) {
+    _pimpl->AsyncCall("add_actor_torque", actor, vector);
+  }
+
   void Client::SetActorSimulatePhysics(rpc::ActorId actor, const bool enabled) {
     _pimpl->AsyncCall("set_actor_simulate_physics", actor, enabled);
+  }
+
+  void Client::SetActorEnableGravity(rpc::ActorId actor, const bool enabled) {
+    _pimpl->AsyncCall("set_actor_enable_gravity", actor, enabled);
   }
 
   void Client::SetActorAutopilot(rpc::ActorId vehicle, const bool enabled) {
@@ -290,6 +341,32 @@ namespace detail {
 
   void Client::ApplyControlToVehicle(rpc::ActorId vehicle, const rpc::VehicleControl &control) {
     _pimpl->AsyncCall("apply_control_to_vehicle", vehicle, control);
+  }
+
+  void Client::EnableCarSim(rpc::ActorId vehicle, std::string simfile_path) {
+    _pimpl->AsyncCall("enable_carsim", vehicle, simfile_path);
+  }
+
+  void Client::UseCarSimRoad(rpc::ActorId vehicle, bool enabled) {
+    _pimpl->AsyncCall("use_carsim_road", vehicle, enabled);
+  }
+
+  void Client::EnableChronoPhysics(
+      rpc::ActorId vehicle,
+      uint64_t MaxSubsteps,
+      float MaxSubstepDeltaTime,
+      std::string VehicleJSON,
+      std::string PowertrainJSON,
+      std::string TireJSON,
+      std::string BaseJSONPath) {
+    _pimpl->AsyncCall("enable_chrono_physics",
+        vehicle,
+        MaxSubsteps,
+        MaxSubstepDeltaTime,
+        VehicleJSON,
+        PowertrainJSON,
+        TireJSON,
+        BaseJSONPath);
   }
 
   void Client::ApplyControlToWalker(rpc::ActorId walker, const rpc::WalkerControl &control) {
@@ -324,6 +401,10 @@ namespace detail {
 
   void Client::ResetTrafficLightGroup(rpc::ActorId traffic_light) {
     _pimpl->AsyncCall("reset_traffic_light_group", traffic_light);
+  }
+
+  void Client::ResetAllTrafficLights() {
+    _pimpl->CallAndWait<void>("reset_all_traffic_lights");
   }
 
   void Client::FreezeAllTrafficLights(bool frozen) {
@@ -411,6 +492,34 @@ namespace detail {
 
   void Client::UpdateServerLightsState(std::vector<rpc::LightState>& lights, bool discard_client) const {
     _pimpl->AsyncCall("update_lights_state", _pimpl->endpoint, std::move(lights), discard_client);
+  }
+
+  std::vector<geom::BoundingBox> Client::GetLevelBBs(uint8_t queried_tag) const {
+    using return_t = std::vector<geom::BoundingBox>;
+    return _pimpl->CallAndWait<return_t>("get_all_level_BBs", queried_tag);
+  }
+
+  std::vector<rpc::EnvironmentObject> Client::GetEnvironmentObjects(uint8_t queried_tag) const {
+    using return_t = std::vector<rpc::EnvironmentObject>;
+    return _pimpl->CallAndWait<return_t>("get_environment_objects", queried_tag);
+  }
+
+  void Client::EnableEnvironmentObjects(
+      std::vector<uint64_t> env_objects_ids,
+      bool enable) const {
+    _pimpl->AsyncCall("enable_environment_objects", std::move(env_objects_ids), enable);
+  }
+
+  std::pair<bool,rpc::LabelledPoint> Client::ProjectPoint(
+      geom::Location location, geom::Vector3D direction, float search_distance) const {
+    using return_t = std::pair<bool,rpc::LabelledPoint>;
+    return _pimpl->CallAndWait<return_t>("project_point", location, direction, search_distance);
+  }
+
+  std::vector<rpc::LabelledPoint> Client::CastRay(
+      geom::Location start_location, geom::Location end_location) const {
+    using return_t = std::vector<rpc::LabelledPoint>;
+    return _pimpl->CallAndWait<return_t>("cast_ray", start_location, end_location);
   }
 
 } // namespace detail

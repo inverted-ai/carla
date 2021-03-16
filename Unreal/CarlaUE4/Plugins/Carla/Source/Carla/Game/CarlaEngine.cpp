@@ -10,16 +10,21 @@
 #include "Carla/Game/CarlaEpisode.h"
 #include "Carla/Game/CarlaStaticDelegates.h"
 #include "Carla/Lights/CarlaLightSubsystem.h"
+#include "Carla/Recorder/CarlaRecorder.h"
 #include "Carla/Settings/CarlaSettings.h"
 #include "Carla/Settings/EpisodeSettings.h"
 
 #include "Runtime/Core/Public/Misc/App.h"
+#include "PhysicsEngine/PhysicsSettings.h"
 
 #include <thread>
 
 // =============================================================================
 // -- Static local methods -----------------------------------------------------
 // =============================================================================
+
+// init static frame counter
+uint64_t FCarlaEngine::FrameCounter = 0;
 
 static uint32 FCarlaEngine_GetNumberOfThreadsForRPCServer()
 {
@@ -82,6 +87,19 @@ void FCarlaEngine::NotifyBeginEpisode(UCarlaEpisode &Episode)
 {
   Episode.EpisodeSettings.FixedDeltaSeconds = FCarlaEngine_GetFixedDeltaSeconds();
   CurrentEpisode = &Episode;
+
+  CurrentEpisode->ApplySettings(CurrentSettings);
+
+  ResetFrameCounter();
+
+  // make connection between Episode and Recorder
+  if (Recorder)
+  {
+    Recorder->SetEpisode(&Episode);
+    Episode.SetRecorder(Recorder);
+    Recorder->GetReplayer()->CheckPlayAfterMapLoaded();
+  }
+
   Server.NotifyBeginEpisode(Episode);
 }
 
@@ -91,47 +109,62 @@ void FCarlaEngine::NotifyEndEpisode()
   CurrentEpisode = nullptr;
 }
 
-void FCarlaEngine::OnPreTick(UWorld *World, ELevelTick TickType, float DeltaSeconds)
+void FCarlaEngine::OnPreTick(UWorld *, ELevelTick TickType, float DeltaSeconds)
 {
+  if (TickType == ELevelTick::LEVELTICK_All)
+  {
+    // update frame counter
+    UpdateFrameCounter();
+
+    // process RPC commands
+    do
+    {
+      Server.RunSome(10u);
+    }
+    while (bSynchronousMode && !Server.TickCueReceived());
+
+    if (CurrentEpisode != nullptr)
+    {
+      CurrentEpisode->TickTimers(DeltaSeconds);
+    }
+  }
+}
+
+void FCarlaEngine::OnPostTick(UWorld *World, ELevelTick TickType, float DeltaSeconds)
+{
+  // tick the recorder/replayer system
+  if (GetCurrentEpisode())
+  {
+    auto* EpisodeRecorder = GetCurrentEpisode()->GetRecorder();
+    if (EpisodeRecorder)
+    {
+      EpisodeRecorder->Ticking(DeltaSeconds);
+    }
+  }
+
   if ((TickType == ELevelTick::LEVELTICK_All) && (CurrentEpisode != nullptr))
   {
     // Look for lightsubsystem
     bool LightUpdatePending = false;
-    if(World)
+    if (World)
     {
       UCarlaLightSubsystem* CarlaLightSubsystem = World->GetSubsystem<UCarlaLightSubsystem>();
-      if(CarlaLightSubsystem)
+      if (CarlaLightSubsystem)
       {
         LightUpdatePending = CarlaLightSubsystem->IsUpdatePending();
       }
     }
 
-    CurrentEpisode->TickTimers(DeltaSeconds);
+    // send the worldsnapshot
     WorldObserver.BroadcastTick(*CurrentEpisode, DeltaSeconds, bMapChanged, LightUpdatePending);
-
     ResetSimulationState();
   }
 }
 
-void FCarlaEngine::OnPostTick(UWorld *, ELevelTick, float DeltaSeconds)
-{
-  if (GetCurrentEpisode())
-  {
-    auto* Recorder = GetCurrentEpisode()->GetRecorder();
-    if (Recorder)
-    {
-      Recorder->Ticking(DeltaSeconds);
-    }
-  }
-  do
-  {
-    Server.RunSome(10u);
-  }
-  while (bSynchronousMode && !Server.TickCueReceived());
-}
-
 void FCarlaEngine::OnEpisodeSettingsChanged(const FEpisodeSettings &Settings)
 {
+  CurrentSettings = FEpisodeSettings(Settings);
+
   bSynchronousMode = Settings.bSynchronousMode;
 
   if (GEngine && GEngine->GameViewport)
@@ -140,6 +173,12 @@ void FCarlaEngine::OnEpisodeSettingsChanged(const FEpisodeSettings &Settings)
   }
 
   FCarlaEngine_SetFixedDeltaSeconds(Settings.FixedDeltaSeconds);
+
+  // Setting parameters for physics substepping
+  UPhysicsSettings* PhysSett = UPhysicsSettings::Get();
+  PhysSett->bSubstepping = Settings.bSubstepping;
+  PhysSett->MaxSubstepDeltaTime = Settings.MaxSubstepDeltaTime;
+  PhysSett->MaxSubsteps = Settings.MaxSubsteps;
 }
 
 void FCarlaEngine::ResetSimulationState()

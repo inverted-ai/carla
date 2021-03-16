@@ -13,6 +13,8 @@
 #include "Carla/Traffic/TrafficLightBase.h"
 #include "Carla/Util/BoundingBoxCalculator.h"
 
+namespace crp = carla::rpc;
+
 static FActorView::ActorType FActorRegistry_GetActorType(const FActorView &View)
 {
   if (!View.IsValid())
@@ -41,11 +43,11 @@ static FActorView::ActorType FActorRegistry_GetActorType(const FActorView &View)
   }
 }
 
-static FString GetRelevantTagAsString(const TSet<ECityObjectLabel> &SemanticTags)
+static FString GetRelevantTagAsString(const TSet<crp::CityObjectLabel> &SemanticTags)
 {
   for (auto &&Tag : SemanticTags)
   {
-    if ((Tag != ECityObjectLabel::None) && (Tag != ECityObjectLabel::Other))
+    if ((Tag != crp::CityObjectLabel::None) && (Tag != crp::CityObjectLabel::Other))
     {
       auto Str = ATagger::GetTagAsString(Tag).ToLower();
       return (Str.EndsWith(TEXT("s")) ? Str.LeftChop(1) : Str);
@@ -62,9 +64,11 @@ FActorView FActorRegistry::Register(AActor &Actor, FActorDescription Description
   if (DesiredId != 0 && Id != DesiredId) {
     // check if the desired Id is free, then use it instead
     if (!Actors.Contains(DesiredId))
+    {
       Id = DesiredId;
       if (ID_COUNTER < Id)
         ID_COUNTER = Id;
+    }
   }
 
   Actors.Emplace(Id, &Actor);

@@ -13,13 +13,34 @@
 #include "Vehicle/VehicleLightState.h"
 #include "Vehicle/VehicleInputPriority.h"
 #include "Vehicle/VehiclePhysicsControl.h"
+#include "VehicleVelocityControl.h"
 #include "WheeledVehicleMovementComponent4W.h"
+#include "VehicleAnimInstance.h"
+#include "MovementComponents/BaseCarlaMovementComponent.h"
 
 #include "CoreMinimal.h"
+
+//-----CARSIM--------------------------------
+#ifdef WITH_CARSIM
+#include "CarSimMovementComponent.h"
+#endif
+//-------------------------------------------
 
 #include "CarlaWheeledVehicle.generated.h"
 
 class UBoxComponent;
+
+UENUM()
+enum class VehicleWheelLocation : uint8 {
+
+  FL_Wheel = 0,
+  FR_Wheel = 1,
+  BL_Wheel = 2,
+  BR_Wheel = 3,
+  //Use for bikes and bicycles
+  Front_Wheel = 0,
+  Back_Wheel = 1,
+};
 
 /// Base class for CARLA wheeled vehicles.
 UCLASS()
@@ -113,11 +134,24 @@ public:
   FVehiclePhysicsControl GetVehiclePhysicsControl() const;
 
   UFUNCTION(Category = "CARLA Wheeled Vehicle", BlueprintCallable)
+  void RestoreVehiclePhysicsControl();
+
+  UFUNCTION(Category = "CARLA Wheeled Vehicle", BlueprintCallable)
   FVehicleLightState GetVehicleLightState() const;
 
   void ApplyVehiclePhysicsControl(const FVehiclePhysicsControl &PhysicsControl);
 
+  void SetSimulatePhysics(bool enabled);
+
+  void SetWheelCollision(UWheeledVehicleMovementComponent4W *Vehicle4W, const FVehiclePhysicsControl &PhysicsControl);
+
   void SetVehicleLightState(const FVehicleLightState &LightState);
+
+  UFUNCTION(BlueprintNativeEvent)
+  bool IsTwoWheeledVehicle();
+  virtual bool IsTwoWheeledVehicle_Implementation() {
+    return false;
+  }
 
   /// @}
   // ===========================================================================
@@ -135,6 +169,12 @@ public:
       InputControl.Priority = Priority;
     }
   }
+
+  UFUNCTION(Category = "CARLA Wheeled Vehicle", BlueprintCallable)
+  void ActivateVelocityControl(const FVector &Velocity);
+
+  UFUNCTION(Category = "CARLA Wheeled Vehicle", BlueprintCallable)
+  void DeactivateVelocityControl();
 
   /// @todo This function should be private to AWheeledVehicleAIController.
   void FlushVehicleControl();
@@ -183,6 +223,14 @@ public:
 
   void SetWheelsFrictionScale(TArray<float> &WheelsFrictionScale);
 
+  void SetCarlaMovementComponent(UBaseCarlaMovementComponent* MoementComponent);
+
+  template<typename T = UBaseCarlaMovementComponent>
+  T* GetCarlaMovementComponent() const
+  {
+    return Cast<T>(BaseMovementComponent);
+  }
+
   /// @}
   // ===========================================================================
   /// @name Overriden from AActor
@@ -196,6 +244,9 @@ protected:
   UFUNCTION(BlueprintImplementableEvent)
   void RefreshLightState(const FVehicleLightState &VehicleLightState);
 
+  UFUNCTION(BlueprintCallable, CallInEditor)
+  void AdjustVehicleBounds();
+
 private:
 
   /// Current state of the vehicle controller (for debugging purposes).
@@ -204,6 +255,9 @@ private:
 
   UPROPERTY(Category = "CARLA Wheeled Vehicle", EditAnywhere)
   UBoxComponent *VehicleBounds;
+
+  UPROPERTY(Category = "CARLA Wheeled Vehicle", EditAnywhere)
+  UVehicleVelocityControl* VelocityControl;
 
   struct
   {
@@ -214,4 +268,33 @@ private:
   InputControl;
 
   FVehicleControl LastAppliedControl;
+  FVehiclePhysicsControl LastPhysicsControl;
+
+public:
+
+  /// Set the rotation of the car wheels indicated by the user
+  /// 0 = FL_VehicleWheel, 1 = FR_VehicleWheel, 2 = BL_VehicleWheel, 3 = BR_VehicleWheel
+  /// An enum could be used, but this is something situational. An uint8 does the trick just fine
+  ///NOTE : This is purely aesthetic. It will not modify the physics of the car in any way
+  UFUNCTION(Category = "CARLA Wheeled Vehicle", BlueprintCallable)
+  void SetWheelSteerDirection(VehicleWheelLocation WheelLocation, float AngleInDeg);
+  
+  UFUNCTION(Category = "CARLA Wheeled Vehicle", BlueprintCallable)
+  float GetWheelSteerAngle(VehicleWheelLocation WheelLocation);
+
+  virtual FVector GetVelocity() const override;
+
+//-----CARSIM--------------------------------
+  UPROPERTY(Category="CARLA Wheeled Vehicle", EditAnywhere)
+  float CarSimOriginOffset = 150.f;
+//-------------------------------------------
+private:
+
+  UPROPERTY(Category="CARLA Wheeled Vehicle", VisibleAnywhere)
+  bool bPhysicsEnabled = true;
+
+  // Small workarround to allow optional CarSim plugin usage
+  UPROPERTY(Category="CARLA Wheeled Vehicle", VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+  UBaseCarlaMovementComponent * BaseMovementComponent = nullptr;
+
 };

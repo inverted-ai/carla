@@ -55,7 +55,7 @@ UCarlaEpisode::UCarlaEpisode(const FObjectInitializer &ObjectInitializer)
   ActorDispatcher = CreateDefaultSubobject<UActorDispatcher>(TEXT("ActorDispatcher"));
 }
 
-bool UCarlaEpisode::LoadNewEpisode(const FString &MapString)
+bool UCarlaEpisode::LoadNewEpisode(const FString &MapString, bool reset_settings)
 {
   FString FinalPath = MapString.IsEmpty() ? GetMapName() : MapString;
   bool bIsFileFound = false;
@@ -104,7 +104,8 @@ bool UCarlaEpisode::LoadNewEpisode(const FString &MapString)
   {
     UE_LOG(LogCarla, Warning, TEXT("Loading a new episode: %s"), *FinalPath);
     UGameplayStatics::OpenLevel(GetWorld(), *FinalPath, true);
-    ApplySettings(FEpisodeSettings{});
+    if (reset_settings)
+      ApplySettings(FEpisodeSettings{});
   }
   return bIsFileFound;
 }
@@ -299,6 +300,18 @@ void UCarlaEpisode::InitializeAtBeginPlay()
     ActorDispatcher->RegisterActor(*Actor, Description);
   }
 
+  // get the definition id for static.prop.mesh
+  auto Definitions = GetActorDefinitions();
+  uint32 StaticMeshUId = 0;
+  for (auto& Definition : Definitions)
+  {
+    if (Definition.Id == "static.prop.mesh")
+    {
+      StaticMeshUId = Definition.UId;
+      break;
+    }
+  }
+
   for (TActorIterator<AStaticMeshActor> It(World); It; ++It)
   {
     auto Actor = *It;
@@ -308,8 +321,15 @@ void UCarlaEpisode::InitializeAtBeginPlay()
     if (MeshComponent->Mobility == EComponentMobility::Movable)
     {
       FActorDescription Description;
-      Description.Id = TEXT("static.prop");
+      Description.Id = TEXT("static.prop.mesh");
+      Description.UId = StaticMeshUId;
       Description.Class = Actor->GetClass();
+      Description.Variations.Add("mesh_path",
+          FActorAttribute{"mesh_path", EActorAttributeType::String,
+          MeshComponent->GetStaticMesh()->GetPathName()});
+      Description.Variations.Add("mass",
+          FActorAttribute{"mass", EActorAttributeType::Float,
+          FString::SanitizeFloat(MeshComponent->GetMass())});
       ActorDispatcher->RegisterActor(*Actor, Description);
     }
   }

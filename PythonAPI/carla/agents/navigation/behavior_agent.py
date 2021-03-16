@@ -12,7 +12,8 @@ import random
 import numpy as np
 import carla
 from agents.navigation.agent import Agent
-from agents.navigation.local_planner_behavior import LocalPlanner, RoadOption
+from agents.navigation.local_planner_behavior import LocalPlanner
+from agents.navigation.local_planner import RoadOption
 from agents.navigation.global_route_planner import GlobalRoutePlanner
 from agents.navigation.global_route_planner_dao import GlobalRoutePlannerDAO
 from agents.navigation.types_behavior import Cautious, Aggressive, Normal
@@ -74,15 +75,13 @@ class BehaviorAgent(Agent):
         elif behavior == 'aggressive':
             self.behavior = Aggressive()
 
-    def update_information(self, world):
+    def update_information(self):
         """
         This method updates the information regarding the ego
         vehicle based on the surrounding world.
-
-            :param world: carla.world object
         """
         self.speed = get_speed(self.vehicle)
-        self.speed_limit = world.player.get_speed_limit()
+        self.speed_limit = self.vehicle.get_speed_limit()
         self._local_planner.set_speed(self.speed_limit)
         self.direction = self._local_planner.target_road_option
         if self.direction is None:
@@ -95,7 +94,7 @@ class BehaviorAgent(Agent):
         if self.incoming_direction is None:
             self.incoming_direction = RoadOption.LANEFOLLOW
 
-        self.is_at_traffic_light = world.player.is_at_traffic_light()
+        self.is_at_traffic_light = self.vehicle.is_at_traffic_light()
         if self.ignore_traffic_light:
             self.light_state = "Green"
         else:
@@ -118,7 +117,7 @@ class BehaviorAgent(Agent):
 
         route_trace = self._trace_route(self.start_waypoint, self.end_waypoint)
 
-        self._local_planner.set_global_plan(route_trace)
+        self._local_planner.set_global_plan(route_trace, clean)
 
     def reroute(self, spawn_points):
         """

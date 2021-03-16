@@ -10,7 +10,7 @@ import sys
 import unittest
 
 try:
-    sys.path.append(glob.glob('../../carla/dist/carla-*%d.%d-%s.egg' % (
+    sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
         sys.version_info.major,
         sys.version_info.minor,
         'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
@@ -27,9 +27,10 @@ class SmokeTest(unittest.TestCase):
     def setUp(self):
         self.testing_address = TESTING_ADDRESS
         self.client = carla.Client(*TESTING_ADDRESS)
-        self.client.set_timeout(60.0)
+        self.client.set_timeout(120.0)
 
     def tearDown(self):
+        self.client.load_world("Town03")
         self.client = None
 
 

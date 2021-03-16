@@ -86,9 +86,6 @@ public:
   /// Method to provide synchronous tick
   virtual bool SynchronousTick() = 0;
 
-  /// Method to reset all traffic lights.
-  virtual void ResetAllTrafficLights() = 0;
-
   /// Get carla episode information
   virtual  carla::client::detail::EpisodeProxy& GetEpisodeProxy() = 0;
 
@@ -103,6 +100,13 @@ public:
 
   /// Method to set hybrid physics radius.
   virtual void SetHybridPhysicsRadius(const float radius) = 0;
+
+  /// Method to set randomization seed.
+  virtual void SetRandomDeviceSeed(const uint64_t seed) = 0;
+  /// Method to set Open Street Map mode.
+  virtual void SetOSMMode(const bool mode_switch) = 0;
+
+  virtual void ShutDown() = 0;
 
 protected:
 

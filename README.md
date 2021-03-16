@@ -15,18 +15,25 @@ validation of autonomous driving systems. In addition to open-source code and pr
 vehicles) that were created for this purpose and can be used freely. The simulation platform supports flexible specification of sensor suites and
 environmental conditions.
 
-[![CARLA Video](Docs/img/video_thumbnail.png)](https://www.youtube.com/watch?v=TOojcifcRBA)
+[![CARLA Video](Docs/img/video_thumbnail_0910.jpg)](https://www.youtube.com/watch?v=7jej46ALVRE)
 
 If you want to benchmark your model in the same conditions as in our CoRL’17
 paper, check out
 [Benchmarking](https://github.com/carla-simulator/driving-benchmarks).
 
-* [**Give feedback for CARLA 0.9.10 pre-release**](https://github.com/carla-simulator/carla/blob/master/Docs/download.md#pre-release-0910)
 * [**Get CARLA overnight build**](http://carla-releases.s3.amazonaws.com/Linux/Dev/CARLA_Latest.tar.gz)
+
+### Recommended system
+
+* Intel i7 gen 9th - 11th / Intel i9 gen 9th - 11th / AMD ryzen 7 / AMD ryzen 9
+* +16 GB RAM memory 
+* NVIDIA RTX 2070 / NVIDIA RTX 2080 / NVIDIA RTX 3070, NVIDIA RTX 3080
+* Ubuntu 18.04
 
 ## CARLA Ecosystem
 Repositories associated to the CARLA simulation platform:
 
+* [**CARLA Autonomous Driving leaderboard**](https://leaderboard.carla.org/): Automatic platform to validate Autonomous Driving stacks
 * [**Scenario_Runner**](https://github.com/carla-simulator/scenario_runner): Engine to execute traffic scenarios in CARLA 0.9.X
 * [**ROS-bridge**](https://github.com/carla-simulator/ros-bridge): Interface to connect CARLA 0.9.X to ROS
 * [**Driving-benchmarks**](https://github.com/carla-simulator/driving-benchmarks): Benchmark tools for Autonomous Driving tasks
@@ -61,8 +68,7 @@ Felipe Codevilla, Antonio Lopez, Vladlen Koltun; PMLR 78:1-16
 Building CARLA
 --------------
 
-Use `git clone` or download the project from this page. Note that the master branch contains the latest fixes and features, for the latest stable code may be
-best to switch to the `stable` branch.
+Use `git clone` or download the project from this page. Note that the master branch contains the most recent release of CARLA with the latest fixes and features.
 
 Then follow the instruction at [How to build on Linux][buildlinuxlink] or [How to build on Windows][buildwindowslink].  
 The Linux build needs for an UE patch to solve some visualization issues regarding Vulkan. Those already working with a Linux build should install the patch and make the UE build again using the following commands.  
@@ -117,13 +123,25 @@ __CARLA Talks 2020 (May):__
 	*   The External Sensor Interface (ESI) — [video](https://youtu.be/5hXHPV9FIeY) | [slides](https://drive.google.com/file/d/1VWFaEoS12siW6NtQDUkm44BVO7tveRbJ/view?usp=sharing)  
 	*   The OpenDRIVE Standalone Mode — [video](https://youtu.be/U25GhofVV1Q) | [slides](https://drive.google.com/file/d/1D5VsgfX7dmgPWn7UtDDid3-OdS1HI4pY/view?usp=sharing)  
 
-License
+Licenses
 -------
+
+###### CARLA licenses
 
 CARLA specific code is distributed under MIT License.
 
 CARLA specific assets are distributed under CC-BY License.
 
+###### CARLA Dependency and Integration licenses
+
 The ad-rss-lib library compiled and linked by the [RSS Integration build variant](Docs/adv_rss.md) introduces LGPL-2.1-only License.
 
-Note that UE4 itself follows its own license terms.
+Unreal Engine 4 follows its [own license terms](https://www.unrealengine.com/en-US/faq).
+
+CARLA uses [PROJ](https://proj.org/), a generic coordinate transformation software which uses the [X/MIT open source license](https://proj.org/about.html#license).
+
+CARLA includes a SQLite dependency for CARLA's Python API which you can check here: https://www.sqlite.org/purchase/license
+
+CARLA uses the Autodesk FBX SDK for converting FBX to OBJ in the import process of maps. This step is optional, and the SDK is located here: https://www.autodesk.com/developer-network/platform-technologies/fbx-sdk-2020-0
+
+This software contains Autodesk® FBX® code developed by Autodesk, Inc. Copyright 2020 Autodesk, Inc. All rights, reserved. Such code is provided "as is" and Autodesk, Inc. disclaims any and all warranties, whether express or implied, including without limitation the implied warranties of merchantability, fitness for a particular purpose or non-infringement of third party rights. In no event shall Autodesk, Inc. be liable for any direct, indirect, incidental, special, exemplary, or consequential damages (including, but not limited to, procurement of substitute goods or services; loss of use, data, or profits; or business interruption) however caused and on any theory of liability, whether in contract, strict liability, or tort (including negligence or otherwise) arising in any way out of such code."

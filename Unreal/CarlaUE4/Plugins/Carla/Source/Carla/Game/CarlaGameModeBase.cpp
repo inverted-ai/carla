@@ -8,11 +8,14 @@
 #include "Carla/Game/CarlaGameModeBase.h"
 #include "Carla/Game/CarlaHUD.h"
 #include "Engine/DecalActor.h"
+#include "Engine/LevelStreaming.h"
 
 #include <compiler/disable-ue4-macros.h>
-#include <carla/rpc/WeatherParameters.h>
 #include "carla/opendrive/OpenDriveParser.h"
 #include "carla/road/element/RoadInfoSignal.h"
+#include <carla/rpc/EnvironmentObject.h>
+#include <carla/rpc/WeatherParameters.h>
+#include <carla/rpc/MapLayer.h>
 #include <compiler/enable-ue4-macros.h>
 
 #include "Async/ParallelFor.h"
@@ -22,6 +25,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 
 namespace cr = carla::road;
+namespace crp = carla::rpc;
 namespace cre = carla::road::element;
 
 ACarlaGameModeBase::ACarlaGameModeBase(const FObjectInitializer& ObjectInitializer)
@@ -35,62 +39,13 @@ ACarlaGameModeBase::ACarlaGameModeBase(const FObjectInitializer& ObjectInitializ
 
   Recorder = CreateDefaultSubobject<ACarlaRecorder>(TEXT("Recorder"));
 
+  ObjectRegister = CreateDefaultSubobject<UObjectRegister>(TEXT("ObjectRegister"));
+
   // HUD
   HUDClass = ACarlaHUD::StaticClass();
 
   TaggerDelegate = CreateDefaultSubobject<UTaggerDelegate>(TEXT("TaggerDelegate"));
   CarlaSettingsDelegate = CreateDefaultSubobject<UCarlaSettingsDelegate>(TEXT("CarlaSettingsDelegate"));
-}
-
-void ACarlaGameModeBase::AddSceneCaptureSensor(ASceneCaptureSensor* SceneCaptureSensor)
-{
-  uint32 ImageWidth = SceneCaptureSensor->ImageWidth;
-  uint32 ImageHeight = SceneCaptureSensor->ImageHeight;
-
-  if(AtlasTextureWidth < ImageWidth)
-  {
-    IsAtlasTextureValid = false;
-    AtlasTextureWidth = ImageWidth;
-  }
-
-  if(AtlasTextureHeight < (CurrentAtlasTextureHeight + ImageHeight) )
-  {
-    IsAtlasTextureValid = false;
-    AtlasTextureHeight = CurrentAtlasTextureHeight + ImageHeight;
-  }
-
-  SceneCaptureSensor->PositionInAtlas = FIntVector(0, CurrentAtlasTextureHeight, 0);
-  CurrentAtlasTextureHeight += ImageHeight;
-
-  SceneCaptureSensors.Add(SceneCaptureSensor);
-
-  UE_LOG(LogCarla, Warning, TEXT("ACarlaGameModeBase::AddSceneCaptureSensor %d %dx%d"), SceneCaptureSensors.Num(), AtlasTextureWidth, AtlasTextureHeight);
-}
-
-void ACarlaGameModeBase::RemoveSceneCaptureSensor(ASceneCaptureSensor* SceneCaptureSensor)
-{
-  FlushRenderingCommands();
-
-  // Remove camera
-  SceneCaptureSensors.Remove(SceneCaptureSensor);
-
-  // Recalculate PositionInAtlas for each camera
-  AtlasTextureWidth = 0u;
-  CurrentAtlasTextureHeight = 0u;
-  for(ASceneCaptureSensor* Camera :  SceneCaptureSensors)
-  {
-    Camera->PositionInAtlas = FIntVector(0, CurrentAtlasTextureHeight, 0);
-    CurrentAtlasTextureHeight += Camera->ImageHeight;
-
-    if(AtlasTextureWidth < Camera->ImageWidth)
-    {
-      AtlasTextureWidth = Camera->ImageWidth;
-    }
-
-  }
-  AtlasTextureHeight = CurrentAtlasTextureHeight;
-
-  IsAtlasTextureValid = false;
 }
 
 void ACarlaGameModeBase::InitGame(
@@ -148,6 +103,10 @@ void ACarlaGameModeBase::InitGame(
 
   GameInstance->NotifyInitGame();
 
+  OnEpisodeSettingsChangeHandle = FCarlaStaticDelegates::OnEpisodeSettingsChange.AddUObject(
+        this,
+        &ACarlaGameModeBase::OnEpisodeSettingsChanged);
+
   SpawnActorFactories();
 
   // make connection between Episode and Recorder
@@ -170,6 +129,9 @@ void ACarlaGameModeBase::RestartPlayer(AController *NewPlayer)
 void ACarlaGameModeBase::BeginPlay()
 {
   Super::BeginPlay();
+
+  LoadMapLayer(GameInstance->GetCurrentMapLayer());
+  ReadyToRegisterObjects = true;
 
   if (true) { /// @todo If semantic segmentation enabled.
     check(GetWorld() != nullptr);
@@ -205,9 +167,10 @@ void ACarlaGameModeBase::BeginPlay()
     Recorder->GetReplayer()->CheckPlayAfterMapLoaded();
   }
 
-  // CaptureAtlasDelegate = FCoreDelegates::OnEndFrameRT.AddUObject(this, &ACarlaGameModeBase::CaptureAtlas);
-  CaptureAtlasDelegate = FCoreDelegates::OnEndFrameRT.AddUObject(this, &ACarlaGameModeBase::SendAtlas);
-
+  if(ReadyToRegisterObjects && PendingLevelsToLoad == 0)
+  {
+    RegisterEnvironmentObjects();
+  }
 }
 
 void ACarlaGameModeBase::Tick(float DeltaSeconds)
@@ -219,12 +182,12 @@ void ACarlaGameModeBase::Tick(float DeltaSeconds)
   {
     Recorder->Tick(DeltaSeconds);
   }
-
-  //SendAtlas();
 }
 
 void ACarlaGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+  FCarlaStaticDelegates::OnEpisodeSettingsChange.Remove(OnEpisodeSettingsChangeHandle);
+
   Episode->EndPlay();
   GameInstance->NotifyEndEpisode();
 
@@ -234,8 +197,6 @@ void ACarlaGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
   {
     CarlaSettingsDelegate->Reset();
   }
-
-  FCoreDelegates::OnEndFrame.Remove(CaptureAtlasDelegate);
 }
 
 void ACarlaGameModeBase::SpawnActorFactories()
@@ -278,10 +239,13 @@ ATrafficLightManager* ACarlaGameModeBase::GetTrafficLightManager()
 {
   if (!TrafficLightManager)
   {
-    AActor* TrafficLightManagerActor = UGameplayStatics::GetActorOfClass(GetWorld(), ATrafficLightManager::StaticClass());
+    UWorld* World = GetWorld();
+    AActor* TrafficLightManagerActor = UGameplayStatics::GetActorOfClass(World, ATrafficLightManager::StaticClass());
     if(TrafficLightManagerActor == nullptr)
     {
-      TrafficLightManager = GetWorld()->SpawnActor<ATrafficLightManager>();
+      FActorSpawnParameters SpawnParams;
+      SpawnParams.OverrideLevel = GetULevelFromName("TrafficLights");
+      TrafficLightManager = World->SpawnActor<ATrafficLightManager>(SpawnParams);
     }
     else
     {
@@ -391,89 +355,169 @@ void ACarlaGameModeBase::DebugShowSignals(bool enable)
 
 }
 
-void ACarlaGameModeBase::CreateAtlasTextures()
+TArray<FBoundingBox> ACarlaGameModeBase::GetAllBBsOfLevel(uint8 TagQueried) const
 {
-  if(AtlasTextureWidth > 0 && AtlasTextureHeight > 0)
-  {
-    FRHIResourceCreateInfo CreateInfo;
-    CamerasAtlasTexture = RHICreateTexture2D(AtlasTextureWidth, AtlasTextureHeight, PF_B8G8R8A8, 1, 1, TexCreate_CPUReadback, CreateInfo);
+  UWorld* World = GetWorld();
 
-    AtlasImage.Init(FColor(), AtlasTextureWidth * AtlasTextureHeight);
+  // Get all actors of the level
+  TArray<AActor*> FoundActors;
+  UGameplayStatics::GetAllActorsOfClass(World, AActor::StaticClass(), FoundActors);
 
-    IsAtlasTextureValid = true;
-  }
+  TArray<FBoundingBox> BoundingBoxes;
+  BoundingBoxes = UBoundingBoxCalculator::GetBoundingBoxOfActors(FoundActors, TagQueried);
+
+  return BoundingBoxes;
 }
 
-void ACarlaGameModeBase::CaptureAtlas()
+void ACarlaGameModeBase::RegisterEnvironmentObjects()
 {
+  // Get all actors of the level
+  TArray<AActor*> FoundActors;
+  UGameplayStatics::GetAllActorsOfClass(GetWorld(), AActor::StaticClass(), FoundActors);
+  ObjectRegister->RegisterObjects(FoundActors);
+}
 
-  ACarlaGameModeBase* This = this;
+void ACarlaGameModeBase::EnableEnvironmentObjects(
+  const TSet<uint64>& EnvObjectIds,
+  bool Enable)
+{
+  ObjectRegister->EnableEnvironmentObjects(EnvObjectIds, Enable);
+}
 
-  if(!SceneCaptureSensors.Num()) return;
+void ACarlaGameModeBase::LoadMapLayer(int32 MapLayers)
+{
+  const UWorld* World = GetWorld();
 
-  // Be sure that the atlas texture is ready
-  if(!IsAtlasTextureValid)
+  TArray<FName> LevelsToLoad;
+  ConvertMapLayerMaskToMapNames(MapLayers, LevelsToLoad);
+
+  FLatentActionInfo LatentInfo;
+  LatentInfo.CallbackTarget = this;
+  LatentInfo.ExecutionFunction = "OnLoadStreamLevel";
+  LatentInfo.Linkage = 0;
+  LatentInfo.UUID = 1;
+
+  PendingLevelsToLoad = LevelsToLoad.Num();
+
+  for(FName& LevelName : LevelsToLoad)
   {
-    CreateAtlasTextures();
-    return;
+    UGameplayStatics::LoadStreamLevel(World, LevelName, true, true, LatentInfo);
+    LatentInfo.UUID++;
   }
 
-  // Enqueue the commands to copy the captures to the atlas
-  for(ASceneCaptureSensor* Sensor : SceneCaptureSensors)
+}
+
+void ACarlaGameModeBase::UnLoadMapLayer(int32 MapLayers)
+{
+  const UWorld* World = GetWorld();
+
+  TArray<FName> LevelsToUnLoad;
+  ConvertMapLayerMaskToMapNames(MapLayers, LevelsToUnLoad);
+
+  FLatentActionInfo LatentInfo;
+  LatentInfo.CallbackTarget = this;
+  LatentInfo.ExecutionFunction = "OnUnloadStreamLevel";
+  LatentInfo.UUID = 1;
+  LatentInfo.Linkage = 0;
+
+  PendingLevelsToUnLoad = LevelsToUnLoad.Num();
+
+  for(FName& LevelName : LevelsToUnLoad)
   {
-    Sensor->CopyTextureToAtlas();
+    UGameplayStatics::UnloadStreamLevel(World, LevelName, LatentInfo, false);
+    LatentInfo.UUID++;
   }
 
-  // Download Atlas texture
-  ENQUEUE_RENDER_COMMAND(ACarlaGameModeBase_CaptureAtlas)
-  (
-    [This](FRHICommandListImmediate& RHICmdList) mutable
+}
+
+void ACarlaGameModeBase::ConvertMapLayerMaskToMapNames(int32 MapLayer, TArray<FName>& OutLevelNames)
+{
+  UWorld* World = GetWorld();
+  const TArray <ULevelStreaming*> Levels = World->GetStreamingLevels();
+  TArray<FString> LayersToLoad;
+
+  // Get all the requested layers
+  int32 LayerMask = 1;
+  int32 AllLayersMask = static_cast<crp::MapLayerType>(crp::MapLayer::All);
+
+  while(LayerMask > 0)
+  {
+    // Convert enum to FString
+    FString LayerName = UTF8_TO_TCHAR(MapLayerToString(static_cast<crp::MapLayer>(LayerMask)).c_str());
+    bool included = static_cast<crp::MapLayerType>(MapLayer) & LayerMask;
+    if(included)
     {
-      FTexture2DRHIRef AtlasTexture = This->CamerasAtlasTexture;
-
-      if (!AtlasTexture)
-      {
-        UE_LOG(LogCarla, Error, TEXT("ACarlaGameModeBase::CaptureAtlas: Missing atlas texture"));
-        return;
-      }
-
-      FIntRect Rect = FIntRect(0, 0, This->AtlasTextureWidth, This->AtlasTextureHeight);
-
-#if !UE_BUILD_SHIPPING
-      if(This->ReadSurfaceMode == 2) Rect = FIntRect(0, 0, This->SurfaceW, This->SurfaceH);
-#endif
-
-#if !UE_BUILD_SHIPPING
-      if (This->ReadSurfaceMode == 0) return;
-#endif
-
-      SCOPE_CYCLE_COUNTER(STAT_CarlaSensorReadRT);
-      RHICmdList.ReadSurfaceData(
-        AtlasTexture,
-        Rect,
-        This->AtlasImage,
-        FReadSurfaceDataFlags(RCM_UNorm, CubeFace_MAX));
-
+      LayersToLoad.Emplace(LayerName);
     }
-  );
+    LayerMask = (LayerMask << 1) & AllLayersMask;
+  }
 
+  // Get all the requested level maps
+  for(ULevelStreaming* Level : Levels)
+  {
+    TArray<FString> StringArray;
+    FString FullSubMapName = Level->GetWorldAssetPackageFName().ToString();
+    // Discard full path, we just need the umap name
+    FullSubMapName.ParseIntoArray(StringArray, TEXT("/"), false);
+    FString SubMapName = StringArray[StringArray.Num() - 1];
+    for(FString LayerName : LayersToLoad)
+    {
+      if(SubMapName.Contains(LayerName))
+      {
+        OutLevelNames.Emplace(FName(*SubMapName));
+        break;
+      }
+    }
+  }
 
 }
 
-void ACarlaGameModeBase::SendAtlas()
+ULevel* ACarlaGameModeBase::GetULevelFromName(FString LevelName)
 {
+  ULevel* OutLevel = nullptr;
+  UWorld* World = GetWorld();
+  const TArray <ULevelStreaming*> Levels = World->GetStreamingLevels();
 
-#if !UE_BUILD_SHIPPING
-  if(!AtlasCopyToCamera)
+  for(ULevelStreaming* Level : Levels)
   {
-    return;
+    FString FullSubMapName = Level->GetWorldAssetPackageFName().ToString();
+    if(FullSubMapName.Contains(LevelName))
+    {
+      OutLevel = Level->GetLoadedLevel();
+      if(!OutLevel)
+      {
+        UE_LOG(LogCarla, Warning, TEXT("%s has not been loaded"), *LevelName);
+      }
+      break;
+    }
   }
-#endif
 
-  for(int32 Index = 0; Index < SceneCaptureSensors.Num(); Index++)
+  return OutLevel;
+}
+
+void ACarlaGameModeBase::OnLoadStreamLevel()
+{
+  PendingLevelsToLoad--;
+
+  // Register new actors and tag them
+  if(ReadyToRegisterObjects && PendingLevelsToLoad == 0)
   {
-    ASceneCaptureSensor* Sensor = SceneCaptureSensors[Index];
-    Sensor->SendPixels(AtlasImage, AtlasTextureWidth);
+    RegisterEnvironmentObjects();
+    ATagger::TagActorsInLevel(*GetWorld(), true);
   }
+}
 
+void ACarlaGameModeBase::OnUnloadStreamLevel()
+{
+  PendingLevelsToUnLoad--;
+  // Update stored registered objects (discarding the deleted objects)
+  if(ReadyToRegisterObjects && PendingLevelsToUnLoad == 0)
+  {
+    RegisterEnvironmentObjects();
+  }
+}
+
+void ACarlaGameModeBase::OnEpisodeSettingsChanged(const FEpisodeSettings &Settings)
+{
+  CarlaSettingsDelegate->SetAllActorsDrawDistance(GetWorld(), Settings.MaxCullingDistance);
 }

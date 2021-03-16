@@ -1,56 +1,130 @@
+## Latest
+	
+  * Fixed bug causing the RoadOptions at the BehaviorAgent to not work as intended
+  * Upgrading to Unreal Engine 4.26
+  * Added Lincoln 2020 vehicle dimensions for CarSim integration
+  * Improved performance bencharmark script: sync, map and sensor selection, ...
+  * Improved performance, destroyed PhysX state for vehicles when physics are disable
+  * Added 'visualize_multiple_sensors' example
+  * Added 'check_lidar_bb' util script
+  * Improved manual_control: now cameras are set in relation with car size
+  * Added CHRONO library for vehicle dynamics simulation (https://projectchrono.org/)
+  * Added performance benchmarking section to documentation
+  * CARLA is compatible with the last RoadRunner nomenclature for road assets
+  * Fixed a bug when importing a FBX map with some **_** in the FBX name
+  * Fix bug in carla.Transform.get_up_vector()
+  * When setting a global plan at the LocalPlanner, it is now optional to stop the automatic fill of the waypoint buffer
+  * API extensions:
+  - Added `set_wheel_steer_direction()` function to change the bone angle of each wheel of a vehicle
+  - Added `get_wheel_steer_angle()` function to get the steer angle of a vehicle whee
+
+## CARLA 0.9.11
+
+  * Improved the documentation for use with pandoc tool by converting html tags to their markdown equivalent
+  * Refactored FAQ section of docs to use minimal html and fix broken layout
+  * Extended the local planner with a lateral `offset`
+  * Upgraded to DirectX 12 on Windows
+  * Added the new core pipeline for the simulator
+  * Added parameter to carla settings to control culling
+  * Added fully deterministic option for Traffic Manager, sorting vehicles by ID and avoiding race conditions
+  * Added the option to sweep the wheel shape for collision. This requires to patch the engine
+  * Added the possibility of changing physics substepping options from client
+  * Added 'noise_seed' to sensors to initialize the random generators
+  * API extensions:
+    - Added `actor.set_enable_gravity()` function to enable/disable the gravity affecting the actor
+    - Added `load_map_layer` and `unload_map_layer` to control map layers on new maps that support subleveling
+    - Added `get_environment_objects`call to get all the placed objects in the level
+    - Added `enable_environment_objects`call to enable/disable objects of the level
+    - Added `horizontal_fov` parameter to lidar sensor to allow for restriction of its field of view
+    - Added `WorldSettings.deterministic_ragdolls` to enable deterministic or physically based ragdolls
+  * Fixed RSSSensor python3 build and import of open drive maps by updating to ad-rss v4.2.0 and ad-map-access v2.3.0. Python import of dependent 'ad' python modules reflects now the namespaces of the C++ interface and follow doxygen documentation
+  * Fixed sensor transformations and sensor data transformations mismatch in IMU and camera-based sensors
+  * Fixed random dead-lock on synchronous mode at high frame rate
+  * Fixed bug on Windows causing sun reflection artifacts
+  * Fixed bug in `waypoint.get_landmarks()` causing some landmarks to be missed when s = 0
+  * Fixed the `actor.set_simulate_physics()` for pedestrians and vehicles
+  * Fixed bug causing camera-based sensors to stop sending data
+  * Fixed the lack of determinism on the output of raycast sensors
+  * Fixed missing `laneChange` record in converted OSM maps
+  * Fixed bug in the actor's id returned by the semantic lidar
+  * Fixed error when using `--config` parameter in `make package`
+  * Fixed dependency of library **Xerces-c** on package
+  * Fixed minor typo in the simulation data section of the documentation
+  * Fixed the `config.py` to read the `.osm ` files in proper `utf-8` encoding
+
 ## CARLA 0.9.10
 
-
-  * Upgraded carla Docker image to Ubuntu 18.04
-  * Added PythonAPI `carla.Osm2Odr.convert()` function and `calra.Osm2OdrSettings` class to support Open Street Maps to OpenDRIVE conversions
-  * Upgraded to AD RSS v4.0.1 supporting unstructured scenes and pedestrians, and fixed spdlog to v1.7.0
-  * Fixed a bug in `spawn_npc_sumo` script computing not allowed routes for a given vehicle class
-  * Fixed a bug where `get_traffic_light` would always return `None`
+  * Added retrieval of bounding boxes for all the elements of the level
+  * Added deterministic mode for Traffic Manager
+  * Added support in Traffic Manager for dead-end roads
+  * Upgraded CARLA Docker image to Ubuntu 18.04
+  * Upgraded to AD RSS v4.1.0 supporting unstructured scenes and pedestrians, and fixed spdlog to v1.7.0
   * Changed frozen behavior for traffic lights. It now affects to all traffic lights at the same time
-  * Added API function `freeze_all_traffic_lights` and `reset_group`
-  * Fixed recorder determinism problems
-  * Added function to stop the replayer
-  * Added Light ids
-  * Added new semantic segmenation tags: `RailTrack`, `GuardRail`, `TrafficLight`, `Static`, `Dynamic`, `Water` and `Terrain`
-  * Fixed several untagged and mistagged objects
-  * Added vehicle light and street light data to recorder
-  * Added API function `add_angular_impulse()` to add angular impulse to any actor
-  * Fixed rain drop spawn issues when spawning camera sensors
-  * Fixed assets import pipeline
-  * Fixed Update.sh from failing when the root folder contains a space on it
-  * Fixed colors of lane markings when importing a map, they were reversed (white and yellow)
-  * Fixed missing include directive in file **WheelPhysicsControl.h**
-  * Fixed gravity measurement bug from IMU sensor
-  * All sensors are now multi-stream, that means that the same sensor can be listened from different clients
-  * Fixed point cloud of LiDAR. Now the points are given correctly in the sensor's coordinate system
-  * Fixed light intensity and camera parameters to match
-  * New Lidar sensor ('lidar.ray_cast_semantic') that returns the point cloud with information regarding to the object that have collided: incident angle, idx of collided actor and it semantic tag
-  * Added `opend3D.py`, a more friendly LiDAR visualizer
-  * Exposed matrix form of transformation to the client and Python API
+  * Added new pedestrian models
+  * API changes:
+    - Renamed `actor.set_velocity()` to `actor.set_target_velocity()`
+    - Renamed `actor.set_angular_velocity()` to `actor.set_target_velocity()`
+    - RGB cameras `exposure_mode` is now set to `histogram` by default
+  * API extensions:
+    - Added `carla.Osm2Odr.convert()` function and `carla.Osm2OdrSettings` class to support Open Street Maps to OpenDRIVE conversion
+    - Added `world.freeze_all_traffic_lights()` and `traffic_light.reset_group()`
+    - Added `client.stop_replayer()` to stop the replayer
+    - Added `world.get_vehicles_light_states()` to get all the car light states at once
+    - Added constant velocity mode (`actor.enable_constant_velocity()` / `actor.disable_constant_velocity()`)
+    - Added function `actor.add_angular_impulse()` to add angular impulse to any actor
+    - Added `actor.add_force()` and `actor.add_torque()`
+    - Added functions `transform.get_right_vector()` and `transform.get_up_vector()`
+    - Added command to set multiple car light states at once
+    - Added 4-matrix form of transformations
+  * Added new semantic segmentation tags: `RailTrack`, `GuardRail`, `TrafficLight`, `Static`, `Dynamic`, `Water` and `Terrain`
+  * Added fixed ids for street and building lights
+  * Added vehicle light and street light data to the recorder
+  * Improved the colliders and physics for all vehicles
+  * All sensors are now multi-stream, the same sensor can be listened from different clients
+  * New semantic LiDAR sensor (`lidar.ray_cast_semantic`)
+  * Added `open3D_lidar.py`, a more friendly LiDAR visualizer
   * Added make command to download contributions as plugins (`make plugins`)
-  * Added PythonAPI command to set multiple car light states at once
-  * Added PythonAPI `carla.world.get_vehicles_light_states` to get all the car light states at once
-  * OpenDRIVE ingestion bugfixes
-  * Added a warning if the user tries to use the SpringArm exactly in the 'z' axis of the attached actor
-  * Improved the LiDAR and Radar sensors with a parallel implentation of the raycasting
+  * Added a warning when using SpringArm exactly in the 'z' axis of the attached actor
+  * Improved performance of raycast-based sensors through parallelization
   * Added an approximation of the intensity of each point of the cloud in the LiDAR sensor
   * Added Dynamic Vision Sensor (DVS) camera based on ESIM simulation http://rpg.ifi.uzh.ch/esim.html
   * Improved LiDAR and radar to better match the shape of the vehicles
   * Added support for additional TraCI clients in Sumo co-simulation
-  * Added script example to syncronize the gathering of sensor data in client
-  * Added API functions `get_right_vector` and `get_up_vector`
+  * Added script example to synchronize the gathering of sensor data in client
   * Added default values and a warning message for lanes missing the width parameter in OpenDRIVE
   * Added parameter to enable/disable pedestrian navigation in standalone mode
-  * Improved mesh split in standalone mode
-  * Fixed delay in the tcp communication from server to client, improving performance in synchronous mode in linux systems
-  * Fixed large RAM usage when loading polinomial geometry from OpenDRIVE
-  * Fixed collision issues when debug draw(debug.draw_line) is called
-  * Fixed Gyroscope sensor to properly give angular velocity readings in local frame
+  * Improved mesh partition in standalone mode
   * Added Renderdoc plugin to the Unreal project
-  * Added configurable noise to Lidar sensor
-  * Replace deprectated `platform.dist()` with recommended `distro.linux_distribution()`
-  * Improved the performance on capture sensors.
-  * Fixed minor typo in the introduction section of documentation.
+  * Added configurable noise to LiDAR sensor
+  * Replace deprecated `platform.dist()` with recommended `distro.linux_distribution()`
+  * Improved the performance of capture sensors
+  * Fixed the center of mass for vehicles
+  * Fixed a number of OpenDRIVE parsing bugs
+  * Fixed vehicles' bounding boxes, now they are automatic
+  * Fixed a map change error when Traffic Manager is in synchronous mode
+  * Fixes add entry issue for applying parameters more than once in Traffic Manager
+  * Fixes std::numeric_limits<float>::epsilon error in Traffic Manager
+  * Fixed memory leak on `manual_control.py` scripts (sensor listening was not stopped before destroying)
+  * Fixed a bug in `spawn_npc_sumo.py` script computing not allowed routes for a given vehicle class
+  * Fixed a bug where `get_traffic_light()` would always return `None`
+  * Fixed recorder determinism problems
+  * Fixed several untagged and mistagged objects
+  * Fixed rain drop spawn issues when spawning camera sensors
+  * Fixed semantic tags in the asset import pipeline
+  * Fixed `Update.sh` from failing when the root folder contains a space on it
+  * Fixed dynamic meshes not moving to the initial position when replaying
+  * Fixed colors of lane markings when importing a map, they were reversed (white and yellow)
+  * Fixed missing include directive in file `WheelPhysicsControl.h`
+  * Fixed gravity measurement bug from IMU sensor
+  * Fixed LiDAR’s point cloud reference frame
+  * Fixed light intensity and camera parameters to match
+  * Fixed and improved auto-exposure camera (`histogram` exposure mode)
+  * Fixed delay in the TCP communication from server to the client in synchronous mode for Linux
+  * Fixed large RAM usage when loading polynomial geometry from OpenDRIVE
+  * Fixed collision issues when `debug.draw_line()` is called
+  * Fixed gyroscope sensor to properly give angular velocity readings in the local frame
+  * Fixed minor typo in the introduction section of the documentation
+  * Fixed a bug at the local planner when changing the route, causing it to maintain the first part of the previous one. This was only relevant when using very large buffer sizes
 
 ## CARLA 0.9.9
 
