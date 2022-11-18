@@ -239,7 +239,7 @@ else
   pushd ${RPCLIB_BASENAME}-libcxx-build >/dev/null
 
   cmake -G "Ninja" \
-      -DCMAKE_CXX_FLAGS="-fPIC -std=c++14 -stdlib=libc++ -I${LLVM_INCLUDE} -Wl,-L${LLVM_LIBPATH} -DBOOST_NO_EXCEPTIONS -DASIO_NO_EXCEPTIONS" \
+      -DCMAKE_CXX_FLAGS="-fPIC -nostdinc++ -std=c++14 -stdlib=libc++ -I${LLVM_INCLUDE} -Wl,-L${LLVM_LIBPATH} -DBOOST_NO_EXCEPTIONS -DASIO_NO_EXCEPTIONS" \
       -DCMAKE_INSTALL_PREFIX="../${RPCLIB_BASENAME}-libcxx-install" \
       ../${RPCLIB_BASENAME}-source
 
@@ -303,7 +303,7 @@ else
   pushd ${GTEST_BASENAME}-libcxx-build >/dev/null
 
   cmake -G "Ninja" \
-      -DCMAKE_CXX_FLAGS="-std=c++14 -stdlib=libc++ -I${LLVM_INCLUDE} -Wl,-L${LLVM_LIBPATH} -DBOOST_NO_EXCEPTIONS -fno-exceptions" \
+      -DCMAKE_CXX_FLAGS="-nostdinc++ -std=c++14 -stdlib=libc++ -I${LLVM_INCLUDE} -Wl,-L${LLVM_LIBPATH} -DBOOST_NO_EXCEPTIONS -fno-exceptions" \
       -DCMAKE_INSTALL_PREFIX="../${GTEST_BASENAME}-libcxx-install" \
       ../${GTEST_BASENAME}-source
 
@@ -578,7 +578,7 @@ if ${USE_CHRONO} ; then
     pushd ${CHRONO_SRC_DIR}/build >/dev/null
 
     cmake -G "Ninja" \
-        -DCMAKE_CXX_FLAGS="-fPIC -std=c++14 -stdlib=libc++ -I${LLVM_INCLUDE} -L${LLVM_LIBPATH} -Wno-unused-command-line-argument" \
+        -DCMAKE_CXX_FLAGS="-fPIC -std=c++14 -nostdinc++ -stdlib=libc++ -I${LLVM_INCLUDE} -L${LLVM_LIBPATH} -Wno-unused-command-line-argument" \
         -DEIGEN3_INCLUDE_DIR="../../${EIGEN_INCLUDE}" \
         -DCMAKE_INSTALL_PREFIX="../../${CHRONO_INSTALL_DIR}" \
         -DCMAKE_BUILD_TYPE=Release \

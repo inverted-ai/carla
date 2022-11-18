@@ -15,7 +15,7 @@ endef
 default: build
 
 clean:
-	@rm -rf $(BUILDDIR) $(INSTALLDIR)
+	@rm -rf $(BUILDDIR) $(INSTALLDIR) $(BINDIR)
 	@rm -f ToolChain.cmake
 
 run: build

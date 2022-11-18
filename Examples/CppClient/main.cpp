@@ -36,7 +36,6 @@ static auto &RandomChoice(const RangeT &range, RNG &&generator) {
 }
 
 /// Save a semantic segmentation image to disk converting to CityScapes palette.
-/*
 static void SaveSemSegImageToDisk(const csd::Image &image) {
   using namespace carla::image;
 
@@ -49,7 +48,6 @@ static void SaveSemSegImageToDisk(const csd::Image &image) {
       ColorConverter::CityScapesPalette());
   ImageIO::WriteView(filename, view);
 }
-*/
 
 static auto ParseArguments(int argc, const char *argv[]) {
   EXPECT_TRUE((argc == 1u) || (argc == 3u));
@@ -114,30 +112,34 @@ int main(int argc, const char *argv[]) {
     transform.rotation.pitch = -15.0f;
     spectator->SetTransform(transform);
 
-/*
+    bool record_with_camera = false;
+
+    if (!record_with_camera) {
+        std::this_thread::sleep_for(10s);
+    } else {
     // Find a camera blueprint.
-    auto camera_bp = blueprint_library->Find("sensor.camera.semantic_segmentation");
-    EXPECT_TRUE(camera_bp != nullptr);
+        auto camera_bp = blueprint_library->Find("sensor.camera.semantic_segmentation");
+        EXPECT_TRUE(camera_bp != nullptr);
 
-    // Spawn a camera attached to the vehicle.
-    auto camera_transform = cg::Transform{
-        cg::Location{-5.5f, 0.0f, 2.8f},   // x, y, z.
-        cg::Rotation{-15.0f, 0.0f, 0.0f}}; // pitch, yaw, roll.
-    auto cam_actor = world.SpawnActor(*camera_bp, camera_transform, actor.get());
-    auto camera = boost::static_pointer_cast<cc::Sensor>(cam_actor);
+        // Spawn a camera attached to the vehicle.
+        auto camera_transform = cg::Transform{
+            cg::Location{-5.5f, 0.0f, 2.8f},   // x, y, z.
+            cg::Rotation{-15.0f, 0.0f, 0.0f}}; // pitch, yaw, roll.
+        auto cam_actor = world.SpawnActor(*camera_bp, camera_transform, actor.get());
+        auto camera = boost::static_pointer_cast<cc::Sensor>(cam_actor);
 
-    // Register a callback to save images to disk.
-    camera->Listen([](auto data) {
-        auto image = boost::static_pointer_cast<csd::Image>(data);
-        EXPECT_TRUE(image != nullptr);
-        SaveSemSegImageToDisk(*image);
-    });
+        // Register a callback to save images to disk.
+        camera->Listen([](auto data) {
+            auto image = boost::static_pointer_cast<csd::Image>(data);
+            EXPECT_TRUE(image != nullptr);
+            SaveSemSegImageToDisk(*image);
+        });
 
-    std::this_thread::sleep_for(10s);
+        std::this_thread::sleep_for(10s);
 
-    // Remove actors from the simulation.
-    camera->Destroy();
-*/
+        // Remove actors from the simulation.
+        camera->Destroy();
+    }
     vehicle->Destroy();
     std::cout << "Actors destroyed." << std::endl;
 
