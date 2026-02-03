@@ -113,11 +113,6 @@ def argument_parser():
         help=f"IAI formatted map on which to create simulate (default: carla:Town10HD, only tested there)",
         default='carla:Town10HD')
     argparser.add_argument(
-        '--capacity',
-        type=int,
-        help=f"The capacity parameter of a quadtree leaf before splitting",
-        default=100)
-    argparser.add_argument(
         '--width',
         type=int,
         help=f"Full width of the area to initialize",
@@ -133,11 +128,6 @@ def argument_parser():
         nargs='+',
         help=f"Center of the area to initialize",
         default=tuple([-50,20]))
-    argparser.add_argument(
-        '--iai-async',
-        type=bool,
-        help=f"Whether to call drive asynchronously",
-        default=True)
     argparser.add_argument(
         '--api-model',
         type=str,
@@ -337,6 +327,7 @@ class SensorManager:
         delete_images: bool = True
     ):
         for cam in self.cameras:
+            print(f"Generating video for camera: {cam}")
             img_list = []
 
             for img_path in sorted(os.listdir(cam.recorder.full_dir_path)):
@@ -816,27 +807,28 @@ def initialize_ego_vehicle(
     return ego_agent_states, ego_agent_properties, response.recurrent_states
 
 def tick_ego_vehicle(
+    args,
     location: str,
-    ego_states: List[AgentState],
-    ego_properties: List[AgentProperties],
-    ego_recurrent_states: List[RecurrentState],
-    npc_states: List[AgentState],
-    npc_properties: List[AgentProperties],
-    npc_recurrent_states: List[RecurrentState],
+    num_ego_agents: int,
+    agent_states: List[AgentState],
+    agent_properties: List[AgentProperties],
+    agent_recurrent_states: List[RecurrentState],
     traffic_lights_states: Optional[Dict[int, TrafficLightState]] = None
 ) -> Tuple[List[AgentState],List[AgentProperties],List[RecurrentState]]:
     ego_response = iai.large_drive(
         location=location,
-        agent_properties=ego_properties+npc_properties,
-        agent_states=ego_states+npc_states,
-        recurrent_states=ego_recurrent_states+npc_recurrent_states,
-        traffic_lights_states=traffic_lights_states
+        agent_properties=agent_properties,
+        agent_states=agent_states,
+        recurrent_states=agent_recurrent_states,
+        traffic_lights_states=traffic_lights_states,
+        api_model_version = args.api_model,
+        random_seed = args.seed
     )
     
-    updated_ego_agent_states = convert_ego_states_to_iai_format(ego_response.agent_states[:len(ego_properties)])
-    updated_ego_agent_properties= convert_ego_properties_to_iai_format(ego_properties)
+    updated_ego_agent_states = convert_ego_states_to_iai_format(ego_response.agent_states[:num_ego_agents])
+    updated_ego_agent_properties= convert_ego_properties_to_iai_format(agent_properties[:num_ego_agents])
 
-    return updated_ego_agent_states, updated_ego_agent_properties, ego_response.recurrent_states[:len(ego_recurrent_states)]
+    return updated_ego_agent_states, updated_ego_agent_properties, ego_response.recurrent_states[:num_ego_agents]
 
 #---------
 # Main
@@ -872,8 +864,8 @@ def main():
         client.start_recorder(logfile)
         print("Recording on file: %s" % logfile)
 
-    seed = args.seed if args.seed is not None else int(time.time())
-    random.seed(seed)
+    args.seed = args.seed if args.seed is not None else int(time.time())
+    random.seed(args.seed)
     
     vehicle_blueprints = get_actor_blueprints(
         world, 
@@ -897,7 +889,7 @@ def main():
 
     # Add Carla-driven pedestrians
     if num_pedestrians>0:
-        world.set_pedestrians_seed(seed)
+        world.set_pedestrians_seed(args.seed)
         blueprintsWalkers = get_actor_blueprints(world, args.filterw, args.generationw)
         if not blueprintsWalkers:
             raise ValueError("Couldn't find any walkers with the specified filters")
@@ -916,7 +908,7 @@ def main():
     response, carla2iai_tl, location_info_response, agent_data = initialize_simulation(
         args=args, 
         world=world,
-        seed=seed,
+        seed=args.seed,
         vehicle_blueprints=vehicle_blueprints,
         existing_agent_data=agent_data
     )
@@ -928,7 +920,7 @@ def main():
     wp_manager = iai.WaypointManager(
         location_info_response = location_info_response,
         cfg = iai.WaypointManagerConfig(
-            random_seed=seed,
+            random_seed=args.seed,
             fail_soft=True
         )
     )
@@ -938,7 +930,7 @@ def main():
 
     if args.iai_log or args.capture_video:
         sim_name = str(int(time.time()))
-        iai_output_dir = os.path.join(os.getcwd(),sim_name)
+        iai_output_dir = os.path.join(os.getcwd(),"output",sim_name)
         os.mkdir(iai_output_dir)
     
     if args.iai_log:
@@ -950,15 +942,13 @@ def main():
         )
         iai_log_output_dir = os.path.join(iai_output_dir,f"iai_log")
         os.mkdir(iai_log_output_dir)
-        iai_output_data = os.path.join(iai_log_output_dir,"output",f"{sim_name}_iai_log")
+        iai_output_data = os.path.join(iai_log_output_dir,f"{sim_name}_iai_log")
 
     # Perform CARLA simulation tick to spawn vehicles
     world.tick()
     
     sensor_manager = None
     try:
-        vehicles = world.get_actors().filter('vehicle.*')
-
         if args.capture_video:
             sensor_manager = SensorManager(
                 world = world,
@@ -967,7 +957,7 @@ def main():
                     CameraSpecification(
                         attachment_cfg = get_default_cam_attachment(
                             attachment = CameraAttachment.REARPOLE,
-                            actor_to_attach = vehicles[random.randint(0,len(vehicles)-1)]
+                            actor_to_attach = sim_agent_data.all_agent_data[0].carla_actor
                         ),
                         type = CameraType.RGB,
                         fps = FPS,
@@ -1000,17 +990,14 @@ def main():
             #=================================================
             #Tick IAI
 
-            # breakpoint()
             response = iai.large_drive(
                 location = args.location,
                 agent_states = response.agent_states,
                 agent_properties = agent_properties,
                 recurrent_states = response.recurrent_states,
                 traffic_lights_states = traffic_lights_states,
-                single_call_agent_limit = args.capacity,
-                async_api_calls = args.iai_async,
                 api_model_version = args.api_model,
-                random_seed = seed
+                random_seed = args.seed
             )
 
             #=================================================
@@ -1018,13 +1005,12 @@ def main():
             #Tick Ego
 
             updated_ego_agent_states, updated_ego_agent_properties, updated_ego_recurrent_states = tick_ego_vehicle(
+                args = args,
                 location = args.location,
-                ego_states = response.agent_states[:num_ego_agents],
-                ego_properties = agent_properties[:num_ego_agents],
-                ego_recurrent_states = response.recurrent_states[:num_ego_agents],
-                npc_states = response.agent_states[num_ego_agents:],
-                npc_properties = agent_properties[num_ego_agents:],
-                npc_recurrent_states = response.recurrent_states[num_ego_agents:],
+                num_ego_agents = num_ego_agents,
+                agent_states = response.agent_states,
+                agent_properties = agent_properties,
+                agent_recurrent_states = response.recurrent_states,
                 traffic_lights_states = response.traffic_lights_states
             )
             response.agent_states[:num_ego_agents] = updated_ego_agent_states
