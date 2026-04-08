@@ -12,6 +12,7 @@ Example script to generate realistic traffic with the InvertedAI API
 
 import os
 import time
+import uuid 
 import carla
 import argparse
 import logging
@@ -26,6 +27,8 @@ from tqdm import tqdm
 from enum import Enum
 from dataclasses import dataclass
 from invertedai.common import AgentProperties, AgentState, TrafficLightState, Point, RecurrentState, AgentType
+from invertedai.common import AgentData as IaiAgentData
+from invertedai import SimulationManager, RegionsConfig, LogWriterConfig 
 from carla import command, Location
 from typing import List, Tuple, Any, Optional, Dict
 
@@ -685,71 +688,120 @@ def assign_carla_blueprints_to_agents(
     
     return agent_data
 
-# Initialize InvertedAI co-simulation
 def initialize_simulation(
-    args, 
+    args,
     world,
     seed,
     vehicle_blueprints,
     existing_agent_data,
-    traffic_lights_states = None
+    existing_agent_ids,        
+    traffic_lights_states=None,
+    iai_log_path=None, 
 ):
-    
     traffic_lights_states, carla2iai_tl = initialize_tl_states(world)
 
-    #################################################################################################
-    # Initialize IAI Agents
     map_center = args.map_center
     print(f"Call location info.")
     location_info_response = iai.location_info(
-        location = args.location,
+        location=args.location,
         include_map_source=True,
-        rendering_center = map_center
+        rendering_center=map_center
     )
-    print(f"Begin initialization.") 
-    # Acquire a grid of 100x100m regions in which to initialize vehicles to be controlled by IAI.
-    regions = iai.get_regions_default(
-        location = args.location,
-        total_num_agents = args.number_of_vehicles,
-        area_shape = (int(args.width/2),int(args.height/2)),
-        map_center = map_center, 
-    )
-    # Place vehicles within the specified regions which will consider the relative states of nearby vehicles in neighbouring regions.
-    response = iai.large_initialize(
-        location = args.location,
-        regions = regions,
-        traffic_light_state_history = [traffic_lights_states],
-        agent_states = [agent.state for agent in existing_agent_data],
-        agent_properties = [agent.properties for agent in existing_agent_data],
-        random_seed = seed
+    print(f"Begin initialization.")
+
+    # Build waypoint config using lanelet map from location_info_response
+    waypoint_cfg = iai.WaypointManagerConfig(
+        lanelet_map=location_info_response.get_lanelet_map(),
+        random_seed=seed,
+        fail_soft=True,
     )
 
-    num_sampled_agents = len(response.agent_properties)
-    agent_data = existing_agent_data + [AgentData(
-        type = AgentSourceType.IAI,
-        state = response.agent_states[ind],
-        properties = response.agent_properties[ind],
-        recurrent_state = response.recurrent_states[ind]
-    ) for ind in range(num_sampled_agents)]
-    
-    agent_data = assign_carla_blueprints_to_agents(
-        world = world,
-        vehicle_blueprints = vehicle_blueprints,
-        agent_data = agent_data
+    # Optionally build log writer config (replaces manual iai.LogWriter setup in main)
+    log_writer_cfg = None
+    if iai_log_path is not None:
+        log_writer_cfg = LogWriterConfig(
+            log_path=iai_log_path,
+            location=args.location,
+            location_info_response=location_info_response,
+        )
+
+    # Create SimulationManager — manages IAI agents internally, handles waypoints and logging
+    simulation_manager = SimulationManager(
+        waypoint_cfg=waypoint_cfg,
+        log_writer_cfg=log_writer_cfg,
     )
 
-    agent_states = []
-    agent_properties = []
-    agent_recurrent_states = []
-    for data in agent_data:
-        agent_states.append(data.state)
-        agent_properties.append(data.properties)
-        agent_recurrent_states.append(data.recurrent_state)
-    response.agent_states = agent_states
-    response.agent_properties = agent_properties
-    response.recurrent_states = agent_recurrent_states
+    # Form regions for IAI-managed agents via SimulationManager wrapper
+    regions_config = RegionsConfig(
+        location=args.location,
+        agent_count_dict={AgentType.car: args.number_of_vehicles},
+        area_shape=(int(args.width/2), int(args.height/2)),
+        map_center=map_center,
+    )
+    regions = simulation_manager.form_regions(regions_config)
 
-    return response, carla2iai_tl, location_info_response, agent_data
+    # Wrap ego + CARLA pedestrian agents as external_agent_data dict keyed by stable IDs
+    external_agent_data = {
+        existing_agent_ids[i]: IaiAgentData(
+            state=existing_agent_data[i].state,
+            properties=existing_agent_data[i].properties,
+            recurrent=None,
+        )
+        for i in range(len(existing_agent_data))
+    }
+
+    # Initialize via SimulationManager (wraps large_initialize; stores IAI agents in agents_dict)
+    response = simulation_manager.initialize(
+        location=args.location,
+        regions=regions,
+        external_agent_data=external_agent_data,
+        traffic_light_state_history=[traffic_lights_states],
+        random_seed=seed,
+    )
+
+    # Spawn CARLA actors for ego-type (non-CARLA-driven) external agents
+    ego_indices = [i for i, d in enumerate(existing_agent_data) if d.type != AgentSourceType.CARLA]
+    ego_subset = assign_carla_blueprints_to_agents(world, vehicle_blueprints,
+                                                    [existing_agent_data[i] for i in ego_indices])
+    for j, i in enumerate(ego_indices):
+        existing_agent_data[i] = ego_subset[j]
+
+    # Spawn CARLA actors for IAI-managed (internal) agents; update SimulationManager properties
+    # with actual CARLA bounding box dimensions and build iai_carla_actors dict
+    iai_agent_ids = simulation_manager.get_agent_ids()
+    iai_states = simulation_manager.get_states()
+    iai_properties = simulation_manager.get_properties()
+    iai_carla_actors = {}
+    agents_to_remove = []
+
+    for i, agent_id in enumerate(iai_agent_ids):
+        blueprint = random.choice(vehicle_blueprints)
+        if blueprint.has_attribute('color'):
+            color = random.choice(blueprint.get_attribute('color').recommended_values)
+            blueprint.set_attribute('color', color)
+        actor = world.try_spawn_actor(blueprint, transform_iai_to_carla(iai_states[i]))
+
+        if actor is not None:
+            bb = actor.bounding_box.extent
+            actor.set_simulate_physics(False)
+            prop = iai_properties[i]
+            prop.length = 2 * bb.x
+            prop.width = 2 * bb.y
+            prop.rear_axis_offset = 2 * bb.x / 3
+            simulation_manager.set_property(agent_id, prop)
+            iai_carla_actors[agent_id] = actor
+        else:
+            agents_to_remove.append(agent_id)
+
+    if agents_to_remove:
+        simulation_manager.remove_agents(agents_to_remove)
+
+    if len(iai_carla_actors) == 0:
+        raise Exception("No vehicles could be placed in Carla environment.")
+
+    print(f"Number of agents initialized: {len(iai_carla_actors) + len(existing_agent_data)}")
+
+    return simulation_manager, iai_carla_actors, carla2iai_tl, location_info_response, response
 
 #---------
 # Synchronize InvertedAI and CARLA traffic lights
@@ -760,7 +812,6 @@ def get_traffic_lights_mapping(world):
     tls = world.get_actors().filter('traffic.traffic_light*')
     tl_ids = sorted([tl.id for tl in list(tls)])
     carla2iai_tl = {}
-    # ID for IAI traffic lights, only valid for Town10 for now (in both UE4 and UE5 versions of the map)
     iai_tl_id = 4364
     for carla_tl_id in tl_ids:
         carla2iai_tl[str(carla_tl_id)] = [str(iai_tl_id), str(iai_tl_id+1000)]
@@ -997,46 +1048,37 @@ def main():
             recurrent_state = RecurrentState()
         ) for ind in range(len(iai_pedestrians_states))]
     
-    # Initialize InvertedAI co-simulation
-    response, carla2iai_tl, location_info_response, agent_data = initialize_simulation(
-        args=args, 
+    if args.iai_log or args.capture_video:
+        sim_name = str(int(time.time()))
+        iai_output_dir = os.path.join(os.getcwd(), "output", sim_name)
+        os.makedirs(iai_output_dir, exist_ok=True)
+    if args.iai_log:
+        iai_log_output_dir = os.path.join(iai_output_dir, "iai_log")
+        os.mkdir(iai_log_output_dir)
+        iai_output_data = os.path.join(iai_log_output_dir, f"{sim_name}_iai_log")
+    else:
+        iai_output_data = None
+
+    existing_agent_ids = [str(uuid.uuid4()) for _ in range(len(agent_data))]
+    simulation_manager, iai_carla_actors, carla2iai_tl, location_info_response, response = initialize_simulation(
+        args=args,
         world=world,
         seed=args.seed,
         vehicle_blueprints=vehicle_blueprints,
         existing_agent_data=agent_data,
-        traffic_lights_states=traffic_lights_states
+        existing_agent_ids=existing_agent_ids,
+        traffic_lights_states=traffic_lights_states,
+        iai_log_path=f"{iai_output_data}.json" if iai_output_data else None,
     )
     sim_agent_data = SimulationData(agent_data)
-    agent_properties = sim_agent_data.get_all_properties()
-    # Map IAI agents to CARLA actors and update response properties and states
-    print(f"Number of agents initialized: {len(response.agent_states)}")
-
-    wp_manager = iai.WaypointManager(
-        location_info_response = location_info_response,
-        cfg = iai.WaypointManagerConfig(
-            random_seed=args.seed,
-            fail_soft=True
+    cosim_agents = {
+        existing_agent_ids[i]: IaiAgentData(
+            state=agent_data[i].state,
+            properties=agent_data[i].properties,
+            recurrent=None,
         )
-    )
-
-    # Write InvertedAI log file, which can be opened afterwards to visualize a gif and further analysis
-    # See an example of usage here: https://github.com/inverted-ai/invertedai/blob/master/examples/scenario_log_example.py
-
-    if args.iai_log or args.capture_video:
-        sim_name = str(int(time.time()))
-        iai_output_dir = os.path.join(os.getcwd(),"output",sim_name)
-        os.mkdir(iai_output_dir)
-    
-    if args.iai_log:
-        log_writer = iai.LogWriter()
-        log_writer.initialize(
-            location=args.location,
-            location_info_response=location_info_response,
-            init_response=response
-        )
-        iai_log_output_dir = os.path.join(iai_output_dir,f"iai_log")
-        os.mkdir(iai_log_output_dir)
-        iai_output_data = os.path.join(iai_log_output_dir,f"{sim_name}_iai_log")
+        for i in range(len(existing_agent_ids))
+    }
 
     # Perform CARLA simulation tick to spawn vehicles
     world.tick()
@@ -1061,45 +1103,52 @@ def main():
                 ]
             )
 
-            # Perform CARLA simulation tick to spawn sensors
             world.tick()
         for frame in tqdm(range(args.sim_length * int(1/IAI_TIME_STEP))):
             traffic_lights_states = assign_iai_traffic_lights_from_carla(world, response.traffic_lights_states, carla2iai_tl)
-            agent_properties = wp_manager.update(
-                response = response,
-                agent_properties = agent_properties,
-                agents_mask = [agent_type == AgentSourceType.IAI for agent_type in sim_agent_data.get_all_types()]
-            )
-            response_prev = response
+            iai_states_prev = simulation_manager.get_states()
+            iai_agent_ids_ordered = simulation_manager.get_agent_ids()
+            cosim_states_prev = {aid: data.state for aid, data in cosim_agents.items()}
 
             #=================================================
-            #Tick IAI
-            response = iai.large_drive(
-                location = args.location,
-                agent_states = response.agent_states,
-                agent_properties = agent_properties,
-                recurrent_states = [RecurrentState.fromval([0.0 for _ in range(len(response.recurrent_states[-1].packed))]) for _ in range(num_ego_agents)] + response.recurrent_states[num_ego_agents:],
-                traffic_lights_states = traffic_lights_states,
-                api_model_version = args.api_model,
-                random_seed = args.seed
+            #Tick IAI via SimulationManager
+            # cosim_agents holds current CARLA-side states (ego + peds); drive returns updated cosim_agents
+            response, cosim_agents = simulation_manager.drive(
+                external_agent_data=cosim_agents,
+                location=args.location,
+                traffic_lights_states=traffic_lights_states,
+                api_model_version=args.api_model,
+                random_seed=args.seed,
+                return_external_dict=True,
             )
+            iai_states_new = simulation_manager.get_states()
             #=================================================
             #=================================================
             #Tick Ego
+            ego_ids = existing_agent_ids[:num_ego_agents]
+            ped_ids  = existing_agent_ids[num_ego_agents:]
+            iai_props  = simulation_manager.get_properties()
+            ped_states = [cosim_agents[pid].state      for pid in ped_ids]
+            ped_props  = [cosim_agents[pid].properties for pid in ped_ids]
+            recur_size = len(ego_recurrent_states[0].packed) if ego_recurrent_states else 64
+            zero_recur = [RecurrentState.fromval([0.0] * recur_size)]
             ego_agent_states, ego_agent_properties, ego_recurrent_states, log_reader = tick_ego_vehicle(
                 args = args,
                 location = args.location,
                 num_ego_agents = num_ego_agents,
-                agent_states = ego_agent_states + response.agent_states[num_ego_agents:],
-                agent_properties = agent_properties,
-                agent_recurrent_states = ego_recurrent_states + [RecurrentState.fromval([0.0 for _ in range(len(ego_recurrent_states[0].packed))]) for _ in range(len(agent_properties)-num_ego_agents)],
+                agent_states = ego_agent_states + iai_states_new + ped_states,
+                agent_properties = ego_agent_properties + iai_props + ped_props,
+                agent_recurrent_states = ego_recurrent_states + zero_recur * (len(iai_props) + len(ped_props)),
                 traffic_lights_states = response.traffic_lights_states,
                 log_reader = log_reader
             )
-            response.agent_states[:num_ego_agents] = ego_agent_states
-            agent_properties[:num_ego_agents] = ego_agent_properties
-            response.recurrent_states[:num_ego_agents] = ego_recurrent_states
-
+            # Update cosim_agents with new ego states so next drive() sees the ego tick result
+            for i, aid in enumerate(ego_ids):
+                cosim_agents[aid] = IaiAgentData(
+                    state=ego_agent_states[i],
+                    properties=ego_agent_properties[i],
+                    recurrent=None,
+                )
             #=================================================
             #=================================================
             #Tick Carla
@@ -1107,38 +1156,46 @@ def main():
                 world.tick()
                 time.sleep(1/FPS)
 
-                sim_agent_data.update_non_carla_iai_states(
-                    agent_states = [interpolate_state(
-                        state = state,
-                        state_prev = state_prev,
-                        t_interp = t_interp,
-                        t_total = args.interpolation_steps
-                    ) for state, state_prev in zip(response.agent_states,response_prev.agent_states)],
-                    agent_properties = agent_properties,
-                    agent_recurrent_states = response.recurrent_states
-                )
+                # Update IAI CARLA actors with interpolated states
+                for j, agent_id in enumerate(iai_agent_ids_ordered):
+                    if agent_id in iai_carla_actors:
+                        interp = interpolate_state(
+                            state=iai_states_new[j],
+                            state_prev=iai_states_prev[j],
+                            t_interp=t_interp,
+                            t_total=args.interpolation_steps,
+                        )
+                        try:
+                            iai_carla_actors[agent_id].set_transform(transform_iai_to_carla(interp))
+                        except:
+                            pass
 
-                sim_agent_data.update_carla_states_from_iai()
+                # Update ego CARLA actors with interpolated states
+                for i, d in enumerate(sim_agent_data.all_agent_data):
+                    if d.type == AgentSourceType.EGO and d.carla_actor is not None:
+                        interp = interpolate_state(
+                            state=cosim_agents[existing_agent_ids[i]].state,
+                            state_prev=cosim_states_prev[existing_agent_ids[i]],
+                            t_interp=t_interp,
+                            t_total=args.interpolation_steps,
+                        )
+                        try:
+                            d.carla_actor.set_transform(transform_iai_to_carla(interp))
+                        except:
+                            pass
 
-                # Update spectator view if there is hero vehicle
                 if args.capture_video:
                     sensor_manager.update_all_sensors()
 
             #=================================================
             #=================================================
-            #Update All Simulation Data
-
-            sim_agent_data.update_iai_states_from_carla()
-
-            response.agent_states = sim_agent_data.get_all_states()
-            agent_properties = sim_agent_data.get_all_properties()
-            response.recurrent_states = sim_agent_data.get_all_recurrent_states()
-
-            if args.iai_log:
-                log_writer.drive(
-                    drive_response=response,
-                    agent_properties=agent_properties
-                )
+            # Update cosim_agents with actual CARLA positions for pedestrians
+            for i, d in enumerate(sim_agent_data.all_agent_data):
+                if d.type == AgentSourceType.CARLA and d.carla_actor is not None:
+                    state, props = initialize_iai_agent(d.carla_actor, d.properties.agent_type)
+                    cosim_agents[existing_agent_ids[i]] = IaiAgentData(
+                        state=state, properties=props, recurrent=None,
+                    )
             #=================================================
 
         time.sleep(0.5)
@@ -1154,9 +1211,9 @@ def main():
 
         if args.iai_log:
             print(f"Writing log data.")
-            log_writer.export_to_file(log_path=f"{iai_output_data}.json")
+            simulation_manager.export_log(path=f"{iai_output_data}.json")
             print(f"Generating birdview GIF.")
-            log_writer.visualize(
+            simulation_manager.log_writer.visualize(
                 gif_path=f"{iai_output_data}.gif",
                 fov = max(args.width,args.height),
                 resolution = (2048,2048),
@@ -1166,7 +1223,7 @@ def main():
                 plot_frame_number = True,
                 map_center = args.map_center,
                 left_hand_coordinates = True,
-                agent_ids = list(range(len(agent_properties)))
+                agent_ids = list(range(len(simulation_manager.get_agent_ids()) + len(agent_data)))
             )
     except Exception as e:
         print(f"{e}")
