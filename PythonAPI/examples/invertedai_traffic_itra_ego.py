@@ -36,8 +36,6 @@ from typing import List, Tuple, Any, Optional, Dict
 # CARLA Utils
 #---------
 
-IAI_TIME_STEP = 0.1
-
 # Argument parser
 def argument_parser():
 
@@ -49,135 +47,104 @@ def argument_parser():
         '--host',
         metavar='H',
         default='127.0.0.1',
-        help='IP of the host server'
-    )
+        help='IP of the host server')
     argparser.add_argument(
         '-p', '--port',
         metavar='P',
         default=2000,
         type=int,
-        help='TCP port to listen to'
-    )
+        help='TCP port to listen to')
     argparser.add_argument(
         '-n', '--number-of-vehicles',
         metavar='N',
         default=50,
         type=int,
-        help='Number of vehicles spawned by InvertedAI'
-    )
+        help='Number of vehicles spawned by InvertedAI')
     argparser.add_argument(
         '-w', '--number-of-walkers',
         metavar='W',
         default=0,
         type=int,
-        help='Number of walkers'
-    )
+        help='Number of walkers')
     argparser.add_argument(
         '--safe',
         type=bool,
         default=True,
-        help='Avoid spawning vehicles prone to accidents'
-    )
+        help='Avoid spawning vehicles prone to accidents')
     argparser.add_argument(
         '--filterv',
         metavar='PATTERN',
         default='vehicle.*',
-        help='Filter vehicle model'
-    )
+        help='Filter vehicle model')
     argparser.add_argument(
         '--generationv',
         metavar='G',
         default='All',
-        help='restrict to certain vehicle generation'
-    )
+        help='restrict to certain vehicle generation')
     argparser.add_argument(
         '--filterw',
         metavar='PATTERN',
         default='walker.pedestrian.*',
-        help='Filter pedestrian type'
-    )
+        help='Filter pedestrian type')
     argparser.add_argument(
         '--generationw',
         metavar='G',
         default='All',
-        help='restrict to certain pedestrian generation'
-    )
+        help='restrict to certain pedestrian generation')
     argparser.add_argument(
         '-s', '--seed',
         metavar='S',
         type=int,
-        help='Set random seed'
-    )
+        help='Set random seed')
     argparser.add_argument(
         '--iai-key',
         type=str,
-        help="InvertedAI API key."
-    )
+        help="InvertedAI API key.")
     argparser.add_argument(
         '--record',
         action='store_true',
         help="Record the simulation using the CARLA recorder",
-        default=False
-    )
+        default=False)
     argparser.add_argument(
         '--sim-length',
         type=int,
         default=60,
-        help="Length of the simulation in seconds"
-    )
+        help="Length of the simulation in seconds")
     argparser.add_argument(
         '--location',
         type=str,
         help=f"IAI formatted map on which to create simulate (default: carla:Town10HD, only tested there)",
-        default='carla:Town10HD'
-    )
+        default='carla:Town10HD')
     argparser.add_argument(
         '--width',
         type=int,
         help=f"Full width of the area to initialize",
-        default=250
-    )
+        default=250)
     argparser.add_argument(
         '--height',
         type=int,
         help=f"Full height of the area to initialize",
-        default=250
-    )
+        default=250)
     argparser.add_argument(
         '--map-center',
         type=int,
         nargs='+',
         help=f"Center of the area to initialize",
-        default=tuple([-50,20])
-    )
+        default=tuple([-50,20]))
     argparser.add_argument(
         '--api-model',
         type=str,
         help=f"IAI API model version",
-        default="nBu1"
-    )
+        default="nBu1")
     argparser.add_argument(
         '--iai-log',
         action="store_true",
-        help=f"Export a log file for the InvertedAI cosimulation, which can be replayed afterwards"
-    )
+        help=f"Export a log file for the InvertedAI cosimulation, which can be replayed afterwards")
     argparser.add_argument(
         '--capture-video',
         action="store_true",
-        help=f"Capture video within Carla."
-    )
-    argparser.add_argument(
-        '--interpolation-steps',
-        type=int,
-        help=f"Number of interpolation steps between default IAI time steps of 100ms (e.g. interpolation steps value of 3 is equivalent to 33.3ms = 30 FPS)",
-        default=1
-    )
-    argparser.add_argument(
-        '--scenario-path',
-        type=str,
-        help=f"Path to an IAI foramtted scenario log to be used for the ego vehicle(s).",
-        default=''
-    )
+        help=f"Capture video within Carla.")
+
     args = argparser.parse_args()
 
     return args
@@ -443,17 +410,12 @@ class SimulationData:
                 self.all_agent_data[agent_id].recurrent_state = agent_recurrent_states[agent_id]
 
     # Update transforms of CARLA agents driven by IAI and tick the world
-    def update_carla_states_from_iai(
-        self,
-        agent_data_list: Optional[List[AgentData]] = None
-    ):
+    def update_carla_states_from_iai(self):
         """
         Tick the carla simulation forward one time step
         Assume carla_actors is a list of carla actors controlled by IAI
         """
-        agent_list = agent_data_list if agent_data_list is not None else self.all_agent_data
-        
-        for agent in agent_list:
+        for agent in self.all_agent_data:
             if not agent.type == AgentSourceType.CARLA:
                 agent_transform = transform_iai_to_carla(agent.state)
                 try:     
@@ -482,13 +444,10 @@ class SimulationData:
 #---------
 
 # Setup CARLA client and world
-def setup_carla_environment(
-    host, 
-    port, 
-    location,
-    step_length = 0.1
-):
+def setup_carla_environment(host, port, location):
     map_name = location.split(":")[-1]
+
+    step_length = 0.1 # 0.1 is the only step length that is supported by invertedai so far
 
     client = carla.Client(host, port)
     client.set_timeout(200.0)
@@ -694,9 +653,6 @@ def initialize_simulation(
     seed,
     vehicle_blueprints,
     existing_agent_data,
-    existing_agent_ids,        
-    traffic_lights_states=None,
-    iai_log_path=None, 
 ):
     traffic_lights_states, carla2iai_tl = initialize_tl_states(world)
 
@@ -887,32 +843,17 @@ def convert_ego_properties_to_iai_format(
     return ego_properties
 
 def initialize_ego_vehicle(
-    location: str,
-    scenario_log_path: Optional[str] = None
+    location: str
 ) -> Tuple[List[AgentState],List[AgentProperties],List[RecurrentState]]:
-    log_reader = None
-    if os.path.exists(scenario_log_path):
-        log_reader = iai.LogReader(
-            log_path = scenario_log_path
-        )
-        log_reader.initialize()
+    response = iai.initialize(
+        location=location,
+        agent_properties=iai.utils.get_default_agent_properties({AgentType.car:1}),
+    )
+    
+    ego_agent_states = convert_ego_states_to_iai_format(response.agent_states)
+    ego_agent_properties = convert_ego_properties_to_iai_format(response.agent_properties)
 
-        ego_agent_states = log_reader.agent_states
-        ego_agent_properties = log_reader.agent_properties
-        ego_recurrent_states = [RecurrentState() for _ in range(len(ego_agent_properties))]
-        traffic_lights_states = [log_reader.traffic_lights_states] if log_reader.traffic_lights_states is not None else None
-
-    else:
-        response = iai.initialize(
-            location=location,
-            agent_properties=iai.utils.get_default_agent_properties({AgentType.car:1}),
-        )
-        ego_agent_states = response.agent_states
-        ego_agent_properties = response.agent_properties
-        ego_recurrent_states = response.recurrent_states
-        traffic_lights_states = response.traffic_lights_states
-
-    return ego_agent_states, ego_agent_properties, ego_recurrent_states, traffic_lights_states, log_reader
+    return ego_agent_states, ego_agent_properties, response.recurrent_states
 
 def tick_ego_vehicle(
     args,
@@ -921,56 +862,22 @@ def tick_ego_vehicle(
     agent_states: List[AgentState],
     agent_properties: List[AgentProperties],
     agent_recurrent_states: List[RecurrentState],
-    traffic_lights_states: Optional[Dict[int, TrafficLightState]] = None,
-    log_reader: Optional[Any] = None
+    traffic_lights_states: Optional[Dict[int, TrafficLightState]] = None
 ) -> Tuple[List[AgentState],List[AgentProperties],List[RecurrentState]]:
-    if log_reader is not None:
-        is_within_log = log_reader.drive()
-        updated_ego_agent_states = log_reader.agent_states
-        updated_ego_agent_properties = log_reader.agent_properties
-        updated_ego_recurrent_states = [RecurrentState() for _ in range(len(updated_ego_agent_properties))]
-        traffic_lights_states = log_reader.traffic_lights_states if log_reader.traffic_lights_states is not None else None
-    
-    if log_reader is None or (log_reader is not None and not is_within_log):
-        ego_response = iai.large_drive(
-            location=location,
-            agent_properties=agent_properties,
-            agent_states=agent_states,
-            recurrent_states=agent_recurrent_states,
-            traffic_lights_states=traffic_lights_states,
-            api_model_version = args.api_model,
-            random_seed = args.seed
-        )
-        
-        updated_ego_agent_states = convert_ego_states_to_iai_format(ego_response.agent_states[:num_ego_agents])
-        updated_ego_agent_properties= convert_ego_properties_to_iai_format(agent_properties[:num_ego_agents])
-        updated_ego_recurrent_states = ego_response.recurrent_states[:num_ego_agents]
-
-    return updated_ego_agent_states, updated_ego_agent_properties, updated_ego_recurrent_states, log_reader
-
-def wrap_angle(angle):
-    ang_wrap = angle % (2*math.pi)
-    if ang_wrap > math.pi:
-        ang_wrap = ang_wrap - 2*math.pi
-    elif ang_wrap < -math.pi:
-        ang_wrap = ang_wrap + 2*math.pi
-
-    return ang_wrap
-
-def interpolate_state(
-    state,
-    state_prev,
-    t_interp,
-    t_total
-):
-    return AgentState(
-        center = Point(
-            x = state_prev.center.x + (state.center.x-state_prev.center.x)*(t_interp+1)/t_total,
-            y = state_prev.center.y + (state.center.y-state_prev.center.y)*(t_interp+1)/t_total
-        ),
-        speed = state_prev.speed + (state.speed-state_prev.speed)*(t_interp+1)/t_total,
-        orientation = wrap_angle(state_prev.orientation + wrap_angle(state.orientation-state_prev.orientation)*(t_interp+1)/t_total)
+    ego_response = iai.large_drive(
+        location=location,
+        agent_properties=agent_properties,
+        agent_states=agent_states,
+        recurrent_states=agent_recurrent_states,
+        traffic_lights_states=traffic_lights_states,
+        api_model_version = args.api_model,
+        random_seed = args.seed
     )
+    
+    updated_ego_agent_states = convert_ego_states_to_iai_format(ego_response.agent_states[:num_ego_agents])
+    updated_ego_agent_properties= convert_ego_properties_to_iai_format(agent_properties[:num_ego_agents])
+
+    return updated_ego_agent_states, updated_ego_agent_properties, ego_response.recurrent_states[:num_ego_agents]
 
 #---------
 # Main
@@ -981,10 +888,9 @@ def main():
 
     # Setup CARLA client and world
     client, world = setup_carla_environment(
-        host = args.host, 
-        port = args.port, 
-        location = args.location,
-        step_length = IAI_TIME_STEP/args.interpolation_steps
+        args.host, 
+        args.port, 
+        args.location
     )
 
     # Specify the IAI API key
@@ -1019,9 +925,8 @@ def main():
         vehicle_blueprints = [x for x in vehicle_blueprints if x.get_attribute('base_type') == 'car']   
 
     agent_data = []
-    ego_agent_states, ego_agent_properties, ego_recurrent_states, traffic_lights_states, log_reader = initialize_ego_vehicle(
-        location = args.location,
-        scenario_log_path = args.scenario_path
+    ego_agent_states, ego_agent_properties, ego_recurrent_states = initialize_ego_vehicle(
+        location = args.location
     )
     agent_data += [AgentData(
         type = AgentSourceType.EGO,
@@ -1065,10 +970,7 @@ def main():
         world=world,
         seed=args.seed,
         vehicle_blueprints=vehicle_blueprints,
-        existing_agent_data=agent_data,
-        existing_agent_ids=existing_agent_ids,
-        traffic_lights_states=traffic_lights_states,
-        iai_log_path=f"{iai_output_data}.json" if iai_output_data else None,
+        existing_agent_data=agent_data
     )
     sim_agent_data = SimulationData(agent_data)
     cosim_agents = {
@@ -1104,98 +1006,85 @@ def main():
             )
 
             world.tick()
-        for frame in tqdm(range(args.sim_length * int(1/IAI_TIME_STEP))):
+        for frame in tqdm(range(args.sim_length * FPS)):
             traffic_lights_states = assign_iai_traffic_lights_from_carla(world, response.traffic_lights_states, carla2iai_tl)
-            iai_states_prev = simulation_manager.get_states()
-            iai_agent_ids_ordered = simulation_manager.get_agent_ids()
-            cosim_states_prev = {aid: data.state for aid, data in cosim_agents.items()}
+            agent_properties = wp_manager.update(
+                response = response,
+                agent_properties = agent_properties,
+                agents_mask = [agent_type == AgentSourceType.IAI for agent_type in sim_agent_data.get_all_types()]
+            )
 
             #=================================================
-            #Tick IAI via SimulationManager
-            # cosim_agents holds current CARLA-side states (ego + peds); drive returns updated cosim_agents
-            response, cosim_agents = simulation_manager.drive(
-                external_agent_data=cosim_agents,
-                location=args.location,
-                traffic_lights_states=traffic_lights_states,
-                api_model_version=args.api_model,
-                random_seed=args.seed,
-                return_external_dict=True,
+            #Tick Carla
+            world.tick()
+            time.sleep(1/FPS)
+
+            # Update spectator view if there is hero vehicle
+            if args.capture_video:
+                sensor_manager.update_all_sensors()
+
+            #=================================================
+            #=================================================
+            #Tick IAI
+
+            response = iai.large_drive(
+                location = args.location,
+                agent_states = response.agent_states,
+                agent_properties = agent_properties,
+                recurrent_states = response.recurrent_states,
+                traffic_lights_states = traffic_lights_states,
+                api_model_version = args.api_model,
+                random_seed = args.seed
             )
-            iai_states_new = simulation_manager.get_states()
+
             #=================================================
             #=================================================
             #Tick Ego
-            ego_ids = existing_agent_ids[:num_ego_agents]
-            ped_ids  = existing_agent_ids[num_ego_agents:]
-            iai_props  = simulation_manager.get_properties()
-            ped_states = [cosim_agents[pid].state      for pid in ped_ids]
-            ped_props  = [cosim_agents[pid].properties for pid in ped_ids]
-            recur_size = len(ego_recurrent_states[0].packed) if ego_recurrent_states else 64
-            zero_recur = [RecurrentState.fromval([0.0] * recur_size)]
-            ego_agent_states, ego_agent_properties, ego_recurrent_states, log_reader = tick_ego_vehicle(
+
+            updated_ego_agent_states, updated_ego_agent_properties, updated_ego_recurrent_states = tick_ego_vehicle(
                 args = args,
                 location = args.location,
                 num_ego_agents = num_ego_agents,
-                agent_states = ego_agent_states + iai_states_new + ped_states,
-                agent_properties = ego_agent_properties + iai_props + ped_props,
-                agent_recurrent_states = ego_recurrent_states + zero_recur * (len(iai_props) + len(ped_props)),
-                traffic_lights_states = response.traffic_lights_states,
-                log_reader = log_reader
+                agent_states = response.agent_states,
+                agent_properties = agent_properties,
+                agent_recurrent_states = response.recurrent_states,
+                traffic_lights_states = response.traffic_lights_states
             )
-            # Update cosim_agents with new ego states so next drive() sees the ego tick result
-            for i, aid in enumerate(ego_ids):
-                cosim_agents[aid] = IaiAgentData(
-                    state=ego_agent_states[i],
-                    properties=ego_agent_properties[i],
-                    recurrent=None,
+            response.agent_states[:num_ego_agents] = updated_ego_agent_states
+            agent_properties[:num_ego_agents] = updated_ego_agent_properties
+            response.recurrent_states[:num_ego_agents] = updated_ego_recurrent_states
+
+            #=================================================
+            #=================================================
+            #Update All Simulation Data
+
+            # Update CARLA actors with new transforms from IAI agents
+            # for ind, state, props in zip(
+            #     sim_agent_data.get_type_indexes(AgentSourceType.EGO),
+            #     updated_ego_agent_states,
+            #     updated_ego_agent_properties
+            # ):
+            #     response.agent_states[ind] = state
+            #     agent_properties[ind] = props
+
+            sim_agent_data.update_non_carla_iai_states(
+                agent_states = response.agent_states,
+                agent_properties = agent_properties,
+                agent_recurrent_states = response.recurrent_states
+            )
+
+            sim_agent_data.update_carla_states_from_iai()
+            sim_agent_data.update_iai_states_from_carla()
+
+            response.agent_states = sim_agent_data.get_all_states()
+            agent_properties = sim_agent_data.get_all_properties()
+            response.recurrent_states = sim_agent_data.get_all_recurrent_states()
+
+            if args.iai_log:
+                log_writer.drive(
+                    drive_response=response,
+                    agent_properties=agent_properties
                 )
-            #=================================================
-            #=================================================
-            #Tick Carla
-            for t_interp in range(args.interpolation_steps):
-                world.tick()
-                time.sleep(1/FPS)
-
-                # Update IAI CARLA actors with interpolated states
-                for j, agent_id in enumerate(iai_agent_ids_ordered):
-                    if agent_id in iai_carla_actors:
-                        interp = interpolate_state(
-                            state=iai_states_new[j],
-                            state_prev=iai_states_prev[j],
-                            t_interp=t_interp,
-                            t_total=args.interpolation_steps,
-                        )
-                        try:
-                            iai_carla_actors[agent_id].set_transform(transform_iai_to_carla(interp))
-                        except:
-                            pass
-
-                # Update ego CARLA actors with interpolated states
-                for i, d in enumerate(sim_agent_data.all_agent_data):
-                    if d.type == AgentSourceType.EGO and d.carla_actor is not None:
-                        interp = interpolate_state(
-                            state=cosim_agents[existing_agent_ids[i]].state,
-                            state_prev=cosim_states_prev[existing_agent_ids[i]],
-                            t_interp=t_interp,
-                            t_total=args.interpolation_steps,
-                        )
-                        try:
-                            d.carla_actor.set_transform(transform_iai_to_carla(interp))
-                        except:
-                            pass
-
-                if args.capture_video:
-                    sensor_manager.update_all_sensors()
-
-            #=================================================
-            #=================================================
-            # Update cosim_agents with actual CARLA positions for pedestrians
-            for i, d in enumerate(sim_agent_data.all_agent_data):
-                if d.type == AgentSourceType.CARLA and d.carla_actor is not None:
-                    state, props = initialize_iai_agent(d.carla_actor, d.properties.agent_type)
-                    cosim_agents[existing_agent_ids[i]] = IaiAgentData(
-                        state=state, properties=props, recurrent=None,
-                    )
             #=================================================
 
         time.sleep(0.5)
@@ -1232,10 +1121,9 @@ def main():
 
 if __name__ == '__main__':
 
-    for _ in range(100):
-        try:
-            main()
-        # except KeyboardInterrupt:
-        #     pass
-        finally:
-            print('\ndone.')
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        print('\ndone.')
